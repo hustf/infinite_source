@@ -123,7 +123,7 @@ N is a global counter, COUNTIMAGE.value.
     Drawing(NaN, NaN, :rec)
     reset_INK_EXTENTS() # Not necessary in a fresh session
     background("deepskyblue2")
-    setcolor("yellow")
+    setcolor("gold2")
     circle(O, 100, :fill) |> encompass
     setcolor("white")
     setfont("Sans", 100)
