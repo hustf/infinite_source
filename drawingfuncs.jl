@@ -1,31 +1,52 @@
+"""
+To use: drawpath(ski_decal(), :fill)
+Refers mutable const SKI_DECAL = Ref{Path}(Path([PathClose()]))
+"""
+function ski_decal()
+    # Reuse if possible, given that text scaling is problematic
+    length(SKI_DECAL[]) > 1 && return SKI_DECAL[]
+    # forget any current path, start a new one
+    newpath() 
+    fontsize(12)
+    str = "Forward >"
+    # Make text the current path
+    textoutlines(str, O + (70, 5))
+    SKI_DECAL[] = storepath()
+end
+
 # Our tourist had skis, 180cm long and 12cm wide, pointing right:
-function one_ski()
+function one_ski(;scale = 1.0)
     # Symmetric ski
-    squircle(O, 180, 6; action =:fillstroke)
-    # More square back
-    squircle(O + (-90, 0), 90, 6; rt = 0.1, action =:fillstroke)
+    squircle(O, 180 * scale, 6 * scale; action =:fillstroke)
+    # More squared ski at the back
+    squircle(O + (-90, 0) .* scale, 90 * scale, 6* scale; rt = 0.1, action =:fillstroke)
+    # decal
+    @layer begin
+        setcolor("yellow")
+        Luxor.scale(scale)
+        drawpath(ski_decal(), :fill)
+        #drawpath(scaled_path(ski_decal(), scale), :fill)
+    end
 end
 # The skis were 12cm apart
-function skis()
+function skis(; scale = 1.0)
     @layer begin
         setcolor("coral")
-        translate(25, 12)
-        one_ski()
-        @layer begin
-            setcolor("cornsilk")
-            settext("<small>Forward</small> ➡", O + (70, 8); markup=true)
-        end
-        translate(0, -24)
-        one_ski()
+        translate(25 * scale, 12 * scale)
+        one_ski(;scale)
+        translate(0, -24 * scale)
+        one_ski(;scale)
     end
 end
 
 # The ski tourist had a nice sombrero on (though no sunglasses):
-function ski_tourist()
+function ski_tourist(;scale = 1.0)
     @layer begin
-        skis()
-        setblend(blend(O, 0, O, 20, "cornsilk", "navajowhite3"))
-        circle(O, 40, :fill)
+        Luxor.scale(0.5)
+        setline(scale)
+        skis(;scale)
+        setblend(blend(O, 0, O, 20 * scale, "cornsilk", "navajowhite3"))
+        circle(O, 40 * scale, :fill)
     end
 end
 
@@ -44,9 +65,20 @@ end
 # Despite the sombrero, the tourist was fast becoming snow-blind.
 # Luckily, our scientists have been studying veering for
 # decades. Walking velocity is constant, angular acceleration is not!
+
+"""
+    θ´(s, θ´₀, θ´´₀)
+dθ/ds @ s
+
+    given
+
+- ds/ds = 1
+- dθ´´/ds = 0
+"""
 θ´(s, θ´₀, θ´´₀) = θ´´₀ * s + θ´₀
 θ(s, θ₀, θ´₀, θ´´₀) = 1/2 * θ´´₀ * s^2 + θ´₀ * s + θ₀
 using QuadGK
+
 func_pos(θ₀, θ´₀, θ´´₀) = begin
     # iszero(θ´´₀) && iszero(θ´₀) => straight line - easy 
     # iszero(θ´´₀)                => circle
@@ -59,17 +91,30 @@ func_pos(θ₀, θ´₀, θ´´₀) = begin
             Point(x,y)
         end
 end
+"""
+    trail_next_length(l, θ₀,  θ´₀, θ´´₀)
+    -> (p::Point,  θ::Float64)
+
+# Effects
+
+- Walk and draw distance 'l' from origin along a constant velocity path defined by arguments
+-- θ₀,  θ´₀, θ´´₀.
+  This is done in segments of length 100 (plus one from s=-100 to s=0). If l = 300, there will be four segments.
+- Update global INK_EXTENT through
+- Return position and direction at end of this trail.
+"""
 function trail_next_length(l, θ₀,  θ´₀, θ´´₀)
     f = func_pos(θ₀, θ´₀, θ´´₀)
     p = O
     θₑ = zero(θ₀)
     for s in range(zero(l), l; length = 1 + Int(ceil(l / 100)))
-        @layer begin 
+        @layer begin
             p = f(s)
+            encompass(p)
             θₑ = θ(s, θ₀, θ´₀, θ´´₀)
             translate(p)
             rotate(-θₑ)
-            trail_last_metre() |> encompass
+            trail_last_metre()
         end
     end
     p, θₑ

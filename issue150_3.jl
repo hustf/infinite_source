@@ -2,6 +2,33 @@
 # related to snap(), inkextents(), inkextent_user()
 @assert Threads.nthreads() > 1
 using Revise, Luxor
+using Luxor: get_current_cr
+import Luxor.Cairo
+using Cairo: user_to_device!, device_to_user!
+import Base.show
+mutable struct Margins
+    t::Int64
+    b::Int64
+    l::Int64
+    r::Int64
+end
+Margins(;t = 24, b = 24, l = 32, r = 32) = Margins(t, b, l, r)
+show(io::IO, ::MIME"text/plain", m::Margins) = print(io, "Margins(t = $(m.t), b = $(m.b), l = $(m.l), r = $(m.r))")
+"Margins outside of ink extents, in pixel / user / canvas coordinates"
+const MARGINS::Ref{Margins} = Margins()
+margins() = MARGINS[]
+set_margins(m::Margins) = begin;MARGINS[] = m;end
+# Values from Drawing()
+const DEFAULT_DRAWING_WIDTH = 800
+const DEFAULT_DRAWING_HEIGHT = 800
+
+function inkextent_default()
+    m = margins()
+    bl = Point(-DEFAULT_DRAWING_WIDTH / 2, -DEFAULT_DRAWING_HEIGHT / 2)
+    tr = -bl
+    # Subtract margins, scale from device to user is 1.0.
+    BoundingBox(bl + (m.l, m.b), tr - (m.r, m.t))
+end 
 
 """
     overlay_file(filename, text)
@@ -52,54 +79,107 @@ end
 # An alternative to keeping track ourselves is `cairo_recording_surface_INK_EXTENT`
 # but that is not yet implemented in Cairo.jl.
 
-"A bounding box centered on a point with fixed margins."
-bb_with_margin(c::Point) = BoundingBox(c - 0.5 .* (480, 360), c + 0.5 .* (480, 360))
+"A bounding box centered on a point, including margins."
+function bb_with_margin(c::Point)
+    m = margins() # user size margins
+    bl = c - Point(m.l, m.b)
+    tr = c + Point(m.r, m.t)
+    BoundingBox(bl, tr)
+end
 function bb_with_margin(bb::BoundingBox)
     pts = [bb.corner1, bb.corner2, Point(bb.corner1.x, bb.corner2.y), Point(bb.corner2.x, bb.corner1.y)]
     bbs = bb_with_margin.(pts)
     bb = first(bbs)
-    bb .+= bbs[2:end]
+    for b in bbs[2:end]
+        bb += b
+    end
     bb
 end 
-start_bb() = bb_with_margin(O)
 # Ink extents are always stored in device ("world") coordinates.
-const INK_EXTENT = Ref{BoundingBox}(start_bb())
-"Include this point with some margin in INK_EXTENT"
-function update_INK_EXTENT(pt)
-    # pt is referred to the current coordinates, i.e., are affected by
+const INK_EXTENT = Ref{BoundingBox}(inkextent_default())
+"""
+    update_INK_EXTENT(pt; c = get_current_cr())
+
+Update a bounding box to include 'pt' mapped to device coordinates.
+
+# Argument
+- pt    Point in user coordinate system.
+# Keyword argument
+- c     Pointer to the device context.
+"""
+function update_INK_EXTENT(pt; c = get_current_cr())
+    # pt is in user coordinates, i.e., are affected by
     # possibly temporary translations and rotations. 
-    # We're storing the 'world' coordinates instead.
-    wx, wy = cairotojuliamatrix(getmatrix()) * [pt.x, pt.y, 1]
-    wpt = Point(wx, wy)
+    # We're storing the device / world coordinates instead.
+    wpt = device_point(pt)
     INK_EXTENT[] += BoundingBox(wpt, wpt)
-    # temp for checking
-    rect_INKEXTENTS()
-    nothing;
+    # TEMP for checking
+    rect_INKEXTENT()
+    nothing
+end
+"""
+   device_point(pt; c = get_current_cr())
+
+Map from user to device coordinates. Related to 'getworldposition', 'getmatrix', 'juliatocairomatrix',
+'cairotojuliamatrix'.
+
+# Argument
+- pt    Point in user coordinate system.
+# Keyword argument
+- c     Pointer to the device context.
+"""
+function device_point(pt; c = get_current_cr())
+    # There's a related function in Luxor, 'getworldposition()' we could use,
+    # but it returns NaN for boundless recording surfaces.
+    # This Cairo function doesn't actually modify the arguments like the '!' indicates.
+    wx, wy = user_to_device!(c, [pt.x, pt.y])
+    Point(wx, wy)
+end
+"""
+   user_point(pt; c = get_current_cr())
+
+Map from device to user coordinates. Related to 'getworldposition', 'getmatrix', 'juliatocairomatrix',
+'cairotojuliamatrix'.
+
+# Argument
+- pt    Point in user coordinate system.
+# Keyword argument
+- c     Pointer to the device context.
+"""
+function user_point(pt; c = get_current_cr())
+    # This Cairo function doesn't actually modify the arguments like the '!' indicates.
+    wx, wy = device_to_user!(c, [pt.x, pt.y])
+    Point(wx, wy)
 end
 
-function userpoint(wpt::Point)
-    # Current transformation matrix (ctm) - from user to device ("world")
-    rma = getmatrix()
-    # Surface inverse ctm - for device("world") to user coordinates
-    rmai = juliatocairomatrix(cairotojuliamatrix(rma)^-1)
-    # World point
-    wx, wy = wpt
-    x, y, _ = cairotojuliamatrix(rmai) * [wx, wy, 1]
-    Point(x, y)
-end
+"""
+    four_corners(bb::BoundingBox)
 
+When dealing with user space, a bounding box is described fully by two points.
+When rotating to device space, the other two corners matter as well.
+"""
+function four_corners(bb::BoundingBox)
+    wpt1, wpt3 = bb
+    wpt2 = Point(wpt3.x, wpt1.y)
+    wpt4 = Point(wpt1.x, wpt3.y)
+    [wpt1, wpt2, wpt3, wpt4]
+end
 """
 Return the INK_EXTENT bounding box,
-but mapped to the user / current coordinate system.
+mapped to the user / current coordinate system.
 """
 function inkextent_user()
-    # Corner points in world coordinates
-    wpt1, wpt2 = INK_EXTENT[]
-    BoundingBox(userpoint(wpt1), userpoint(userpoint(wpt2)))
+    # Corner points in device coordinates
+    bb = INK_EXTENT[]
+    wpts = four_corners(bb)
+    c = get_current_cr()
+    # Corners mapped to user coordinates
+    upts = map(wpt-> user_point(wpt; c), wpts)
+    BoundingBox(upts)
 end
 
 "For debugging"
-function rect_INKEXTENTS()
+function rect_INKEXTENT()
     @layer begin
         setcolor("green")
         setline(10)
@@ -111,7 +191,10 @@ function rect_INKEXTENTS()
         rect(ie.corner1, boxwidth(iwm), boxheight(iwm), :stroke)
     end
 end
-reset_INK_EXTENT() = begin;INK_EXTENT[] = start_bb();nothing;end
+function inkextent_reset()
+    INK_EXTENT[] = inkextent_default()
+end
+
 """
     encompass(point or (points))
 
@@ -121,13 +204,35 @@ Update boundaries of drawing including a margin.
 
 Update boundaries to the union of bb and previous boundaries.
 """
-encompass(pt::Point) = update_INK_EXTENT(pt)
-encompass(pts::Tuple{P, P}) where {P<:Point} = begin encompass.(pts);nothing;end
-encompass(pts::Vector{Point}) = begin encompass.(pts);nothing;end
-encompass(bb::BoundingBox) = begin;encompass.(bb);nothing;end
+encompass(pt::Point; c = get_current_cr()) = update_INK_EXTENT(pt; c)
+function encompass(pts; c = get_current_cr())
+    for pt in pts
+        @assert pt isa Point "pt is not a Point, but a $(typeof(pt)) contained in a $(typeof(pts))"
+        encompass(pt; c)
+    end
+    nothing
+end
 
-current_scalefactor() = √(480^2 + 360^2) / boxdiagonal(bb_with_margin(inkextent_user()))
+"""
+    get_scale_inkextents_margins()
 
+Not quite sure that this is needed, but there is some complexity regarding margins.
+If not needed, `getscale` will do the trick.
+"""
+function get_scale_inkextents_margins()
+    m = margins()
+    bl, tr = inkextent_user()
+    bbw = INK_EXTENT[]
+    userwidth = m.l + m.r + boxwidth(bbw)
+    userheight = m.t + m.b + boxheight(bbw)
+    userdiagonal = √(userwidth^2 + userheight^2)
+    # The margins, in 'world' coordinates, depend upon the current scaling
+    sx, sy = getscale()
+    worldwidth = userwidth / sx
+    worldheight = userheight / sy
+    worlddiagonal = √(worldwidth^2 + worldheight^2)
+    userdiagonal / worlddiagonal
+end
 
 """
 A stateful image sequence counter for procedural (aka scripting) work.
@@ -153,7 +258,7 @@ N is a global counter, COUNTIMAGE.value.
 # Example
 ```
     Drawing(NaN, NaN, :rec)
-    reset_INK_EXTENT() # Not necessary in a fresh session
+    inkextent_reset() # Not necessary in a fresh session
     background("deepskyblue2")
     setcolor("gold2")
     circle(O, 100, :fill) |> encompass
@@ -185,10 +290,33 @@ function snap(f_overlay::Function, cb::BoundingBox, scalefactor::Float64)
     snapshot(fpng, cb, scalefactor)
     fetch(Threads.@spawn overlay_file(f_overlay, fpng))
 end
-snap(f_overlay::Function) = snap(f_overlay, bb_with_margin(inkextent_user()), current_scalefactor())
+snap(f_overlay::Function) = snap(f_overlay, bb_with_margin(inkextent_user()), get_scale_inkextents_margins())
 snap(text::String) = snap() do 
     setcolor("black")
     setfont("Sans", 24)
     settext(text, O + (-200, -120); markup=true)
 end
-snap() = snap( () -> nothing, bb_with_margin(inkextent_user()), current_scalefactor())
+snap() = snap( () -> nothing, bb_with_margin(inkextent_user()), get_scale_inkextents_margins())
+
+#= Dead code; scaling works anyway!
+function scaled_path(pt::Path, sc)
+    nv = Vector{PathElement}()
+    for pe in pt
+        ne = scaled_path_element(pe, sc)
+        push!(nv, ne)
+    end
+    Path(nv)
+end
+function scaled_path_element(pe::T, sc) where {T<:PathElement}
+    v = Vector{Any}()
+    for i in 1:nfields(pe)
+        detail = getfield(pe, i)
+        newdetail = scaled_path_detail(detail, sc)
+        push!(v, newdetail)
+    end
+    T(v...)
+end
+function scaled_path_detail(pe::Point, sc)
+    pe * sc
+end
+=#
