@@ -1,123 +1,218 @@
-# For text on Windows, we still need to pin
-# a dependency of Cairo:
-#import Pkg
-#Pkg.pin(name = "Pango_jll", version = "v1.42.4")
-# Some imports, some functions defined earlier
-include("issue150_3.jl")
+# Imports, snap, etc.
+include("adaptive_scaling.jl")
+# We have some old images we won't overwrite. Start at:
+COUNTIMAGE.value = 99
 "A storage for some text since font scaling is hard"
 const SKI_DECAL = Ref{Path}(Path([PathClose()]))
 
-# For drawing multiple times
+# Example specifics
 include("drawingfuncs.jl")
 
+#############################################################
+#
+# Note, we're not starting with a simple overlay here. 
+# Our overlay needs to know the scaling from user scale
+# to output scale (800 x 800), as well as the position
+# of the user space orgin relative to the output image.
+# The overlay function use this to place a 'sprite' at the
+# current user-space origin.
+# Hence, we calculate these scales and positions explicitly,
+# and then convey these as keywords to the 'overlay' function
+# through 
+#    snap(overlay, cb, outscale; pt, scale = outscale, text)
+#
+# Most use cases can simply call snap() or snap(overlay)!
+#
+#############################################################
 
-# A long time ago, a passing satelite took note of 
-# a ski tourist at EU89, UTM 33, latitude 6862878.24 
-# longitude 75574.22. It's an ice waste.
-begin
- 
-#    snapshot(;cb)
-   # snap() do
-   #     ski_tourist(;scale = 1)
-   # end
-end
-# Despite the sombrero, the tourist was fast becoming snow-blind.
-# Luckily, our scientists have been studying veering for
-# decades. Walking velocity is constant, angular acceleration is not!
-
+###
+# 1
+###
 Drawing(NaN, NaN, :rec)
 background("snow1")
-inkextent_reset()
-begin
-    # Draw trail, 1m = 100cm. This includes 100cm behind the start.
-    p, θₑ = trail_next_length(100, 0, 0, 0)
-    # Move origin to end of trail
-
-    translate(p)
-    snap() do
-        scale = current_scalefactor()
-        @show scale
+# In this first image, we're going to zoom in when making an image.
+# If we were using inkextent_reset(), that would set us up for a larger
+# area than intended.
+inkextent_set(BoundingBox(Point(-190, -170), Point(360, 50)))
+p, θₑ = trail_next_length(150, 0, 0, 0)
+translate(p)
+rotate(-θₑ)
+outscale = get_scale_limiting()
+cb = inkextent_user_with_margin()
+# The origin of output in user coordinates:
+pto = midpoint(cb)
+# The current user origin in output coordinates
+pt = (O - pto) * outscale
+mark_inkextent()
+snapshot(;cb, scalefactor = outscale) # No overlay, no file output
+function overlay(;pt, scale, text)
+    @layer begin
+        translate(pt)
         ski_tourist(;scale)
     end
+    _text_on_overlay(text)
 end
-p, θₑ = trail_next_length(1000, π / 10, 0, 0)
-p |> encompass
-translate(-p)
+text = """
+
+A sombrero is just a hat. It does not
+protect against the sun while skiing.
+"""
+snap(overlay, cb, outscale; pt, scale = outscale, text)
+
+###
+# 2
+###
+
+p, θₑ = trail_next_length(283, 0, 0.00095, 0)
+translate(p)
 rotate(-θₑ)
-snap() do
-    ski_tourist(;scale = current_scalefactor())
+# Increase default margin, lest the skis poke out
+set_margins(;r = 200)
+outscale = get_scale_limiting()
+cb = inkextent_user_with_margin()
+pt = (O - midpoint(cb)) * outscale
+mark_inkextent()
+text = """
+
+Pretty soon, the sombrero-skier will turn 
+snowblind. And turn to veering off course.
+"""
+snap(overlay, cb, outscale; pt, scale = outscale, text)
+
+###
+# 3
+###
+# Revert to default margins
+set_margins(Margins())
+inkextent_reset() # Back to scale 1:1 for 800x800 pixels
+θ´max = 0.00095
+p, θₑ = trail_next_length(6000, 0, θ´max, 0)
+translate(p)
+rotate(-θₑ)
+outscale = get_scale_limiting()
+cb = inkextent_user_with_margin()
+pt = (O - midpoint(cb)) * outscale
+mark_inkextent()
+text = """
+Scientists know that sober students, when blindfolded, 
+curve around in loops as tight as 20 meter diameter.
+
+Perhaps skis help keep the course better? 
+Then again, the students were sober.
+"""
+snap(overlay, cb, outscale; pt, scale = outscale, text)
+
+###
+# 4
+###
+
+Drawing(NaN, NaN, :rec)
+background("snow2")
+inkextent_reset()
+text = """
+
+This skier is Mr. Professor Statistician. He assumes the 
+20 meter diameter represents 2.25σ in a 
+normal distribution of veering samples:
+"""
+angvel = randn(200) * θ´max / 2.25
+for a in angvel
+    trail_next_length(1000, 0, a, 0)
 end
-p, θₑ = trail_next_length(1000, 0, (π / 10) / (10 * 100), 0)
-@layer begin
+outscale = get_scale_limiting()
+cb = inkextent_user_with_margin()
+pt = (O - midpoint(cb)) * outscale
+mark_inkextent()
+snap(overlay, cb, outscale; pt, scale = outscale, text)
+
+###
+# 5
+###
+
+Drawing(NaN, NaN, :rec)
+background("snow2")
+inkextent_reset()
+text = """
+
+The most probable diameter of veering is,
+most probably, μ = 67m. Probably. 
+And veering probably changes linearly while walking.
+Professor expects to walk in Euler spirals, not circles.
+"""
+@layer begin 
+    sethue("green")
+    r = 6700 / 2 #cm
+    setopacity(0.2)
+    circle(O + (0, r), r, :fill) |> encompass
+end
+angvel = randn(20) * θ´max / 2.25
+angacc = randn(20) * θ´max / (2.25 * 100^2)
+for (a, acc) in zip(angvel, angacc)
+    trail_next_length(10000, 0, a, acc)
+end
+outscale = get_scale_limiting()
+cb = inkextent_user_with_margin()
+pt = (O - midpoint(cb)) * outscale
+mark_inkextent()
+snap(overlay, cb, outscale; pt, scale = outscale, text)
+
+###
+# 6
+###
+
+Drawing(NaN, NaN, :rec)
+background("snow2")
+inkextent_reset()
+function randomstep()
+    angle = 0.05 * rand() * 2π
+    angvel = randn(1)[1] * θ´max / 2.25
+    angacc = randn(1)[1] * θ´max / (2.25 * 100^2)
+    p, θₑ = trail_next_length(5300, angle, angvel, angacc)
     translate(p)
     rotate(-θₑ)
-    snap(ski_tourist)
-end
-snap()
-trail_next_length(1000, 0, -(π / 10) / (10 * 100), (π / 5) / (10 * 100)^2) |> encompass
-snap()
-
-
-
-# We shall need a way to add text, then revert. It is tempting to use the drawing stack for 
-# storing a copy. However, I am not sure if the stack is intended for holding several drawings 
-# per thread of execution. So we'll just use a new global container instead,
-# and worry about using several threads later (if this works).
-
-
-
-
-snap()
-Drawing(NaN, NaN, :rec)
-background("snow")
-circle(O, 100, :fillstroke)
-snap()
-
-
-
-f = () -> begin
-    setcolor("blue")
-    settext("<big>Forward</big> ➡", O + (0, 0); markup=true)
+    outscale = get_scale_limiting()
+    cb = inkextent_user_with_margin()
+    pt = (O - midpoint(cb)) * outscale
+    cb, outscale, pt
 end
 
-snap_overlay(f)
-# The satelite could see a long history of 'last-metre-trails', but 
-# only one sombrero-wearing ski tourist. 
-#
-# How can we draw the tourist only once, while keeping the recorded history of 
-# last-metre ski trails?
-#
-# Currently, each time we call `snap` -> `snapshot`, we
-# internally 
-#    1)  create a new internal drawing with a filename 
-#    2)  play (paint actually) the previously existing record of commands on the new surface
-#    3)  `finish` the internal drawing, which outputs a file.
-#    4)  switch back to the previously existing recording
-#    5) Return the finished internal drawing, which is displayed depending on the calling context.
-#
-# Is that not obvious? We would take a copy of the :rec, add the tourist, take a snapshot like above, 
-# and retur-n to the old recording. 
-# This solution is harder than it sounds, because Cairo sort of owns the internals of the recording.
-# If we were able to do that, we could very easily add an 'undo' function too! 
-# Another, way to do this is to have two :rec drawings, and paint them both onto the snapshot.
-# Let's do that, although it's not quite as cool!
+cb, outscale, pt = randomstep()
+text = """
+Mr. Professor, steeped in knowledge, decides to:
+- walk μ·π / 4 = 53m
+- take a moment of academic contemplation to 
+  reset his bearings
+- call the above a random step and repeat
 
+After the first random step, direct 
+distance from start is $(distance_device_origin() / 100)m.
+"""
+snap(overlay, cb, outscale; pt, scale = outscale, text)
 
+###
+# 7
+###
 
+N = 500
 
+for i = 2:N
+    local cb, outscale, pt = randomstep()
+    println(i)
+    if i == N
+        local text = """
+        After $i 'random steps' and walking $(round(i * 0.053; digits = 1))km, 
+        his straight distance from start is just $(distance_device_origin() / 100)m.
+        You may need to zoom in to see the trail?
+        
+        Mr. Professor now realizes what a poor sod he is, 
+        stuck in a nightmare statistics example.
 
-
-
-
-
-
-
-
-
-# A sombrero was a poor choice. 
-
-
-
-#Blindfolded people show the same tendency; lacking external reference points, they curve around in loops as tight as 66 feet (20 meters) in diameter,
-
-# Blindfolded people show the same tendency; lacking external reference points, they curve around in loops as tight as 66 feet (20 meters) in diameter,
+        Why didn't he
+        - explain random steps better?
+        - use sunglasses?
+        - give certain students better marks?
+        """
+        global sn = snap(overlay, cb, outscale; pt, scale = outscale, text)
+    end
+end
+sn

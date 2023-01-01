@@ -1,135 +1,236 @@
-# Some imports, some functions defined earlier
-include("issue150_3.jl")
+# Imports, snap etc.:
+include("adaptive_scaling.jl")
 using Test
-#@testset "No viewport transformation" begin
+COUNTIMAGE.value = 49
+@testset "Viewport extension without work (user)-space scaling" begin
     Drawing(NaN, NaN, :rec)
+    # Margins are set in 'output' points.
+    # They are scaled to user coordinates where needed.
+    m = margins()
+    t1, b1, l1, r1 = m.t, m.b, m.l, m.r
+    m = set_margins(Margins())
+    t2, b2, l2, r2 = m.t, m.b, m.l, m.r
+    @test t1 == t2
+    @test b1 == b2
+    @test l1 == l2
+    @test r1 == r2
+    bb1 = inkextent_user()
     inkextent_reset()
-    background("blanchedalmond")
-    # Before any operations, we assume that the desired output 
-    # is 800x800, and that that includes default 'margins()'
-    bbo = inkextent_user()
-    @test boxwidth(bbo) + margins().l + margins().r == 800
-    @test boxheight(bbo) + margins().t + margins().b == 800
-    pic1 = snap() # svg file + png file + png in memory
-    @test pic1.width == 800
-    @test pic1.height == 800
-    # Increasing margins expands outwards, not inwards
-    set_margins(Margins(;l = 32 + 100))
-    bbn = inkextent_user()
-    @test all(bbo .== bbn)
-    pic2 = snap() # svg file + png file + png in memory
+    bb2 = inkextent_user()
+    @test all(bb1 .== bb2)
+    s1 = get_scale_limiting()
+    @test s1 == 1
+    mark_inkextent()
+    # Add a background with transparency - the old inkextent
+    # will show.
+    background(Luxor.RGBA(1.0,0.922,0.804, 0.5))
+    # Expand inkextent by adding graphics and |> encompass
+    setcolor("darkblue")
+    for y in range(0, 1200, step = 300)
+        text("y $y", Point(0, y)) |> encompass
+    end
+    mark_inkextent()
+    snap("This is overlain")
+    # Desired output with margins is either
+    #   800 x   800 
+    #   800 x <=800
+    # <=800 x   800
+    # get_scale_limiting() returns the scaling to fit within margins.
+    bb2 = inkextent_user()
+    s2 = get_scale_limiting() 
+    # svg file + png file + png in memory.
+    pic2 = snap() 
+    @test pic2.width == 415
     @test pic2.height == 800
-    @test pic2.width == 900
-    #
-    # TODO
+    # Increasing (the left) margin by 100 expands inwards
+    # (possibly changing the scale to fit inkextent), not outwards
+    # (the output image will not grow larger)
+    set_margins(;l = 32 + 100)
+    bb3 = inkextent_user()
+    s3 = get_scale_limiting() 
+    @test boxwidth(bb2) == boxwidth(bb3)
+    # In this case, the necessary scaling was unchanged,
+    # as the height of inkextent, top and bottom margin
+    # determines the scaling. We had room to add a wider 
+    # left margin and could still fit in the output image. 
+    @test s2 == s3
 
-
-    dbb = BoundingBox(Point(-368, -376), Point(368, 376))
-    @test all(inkextent_user() .== dbb)
-    inkextent_reset()
-    @test all(inkextent_user() .== dbb)
-    #
-    @test get_scale_inkextents_margins() == 1
-    rect(dbb.corner1, boxwidth(dbb), boxheight(dbb), :fill)
+    # We can add rectangles as normal - they are not taken to be background
     setcolor("burlywood")
-    circle(O, boxwidth(dbb) / 2, :fill)
-    pic1 = snap()
-    # Draw outside inkextents, enlarge output too.
-    pt = inkextent_user().corner2
-    encompass(circle(pt, 50, :fill))
-    dbb = BoundingBox(dbb.corner1, pt + (50, 50))
-    @test all(inkextent_user() .== dbb)
-    @test get_scale_inkextents_margins() == 1
-    pic2 = snap()
-    @test pic2.width - pic1.width == 50
-#end
+    setopacity(0.65)
+    rect(O + (-1000, 0), 1000, 1200, action = :fill) |> encompass
+    setopacity(1.0)
+    bb3 = inkextent_user()
+    @test boxwidth(bb3) == 1368
+    @test boxheight(bb3) == 1576
+    setcolor("darkblue")
+    mark_inkextent()
+    s4 = get_scale_limiting()
+    @test s4 < s3
+    pic3 = snap() # svg file + png file + png in memory
+    @test pic3.height < 800
+    @test pic3.width == 800
+end
 
-#@testset "Scaling" begin
+
+
+@testset "User (work) to device space: Zooming out" begin
     Drawing(NaN, NaN, :rec)
     inkextent_reset()
-    background("blanchedalmond")
-    # Before any operations, we assume that the desired output 
-    # is 800x800, and that that includes default 'margins()'
+    set_margins(Margins())
     bbo = inkextent_user()
+    @test all(inkextent_device() .== bbo)
     #
+    # Set scaling transformation from user to device space.
     sc = 0.5
     scale(sc)
+    # i.e. (1,1) in user space now maps to (0.5, 0.5) in device space.
+    # Inkextents are "really" set in device coordinates.
+    # So the unchanged ink extents, when mapped to user coordinates,
+    # just doubled in width and height.
     bbn = inkextent_user()
-    @test all(bbn .== bbo * 1/sc)
-    #
-    @test get_scale_inkextents_margins() == sc
-    rect(dbb.corner1, boxwidth(dbb), boxheight(dbb), :fill)
-    setcolor("burlywood")
-    circle(O, boxwidth(dbb) / 2, :fill)
-    pic1 = snap()
-    # Draw outside inkextents, enlarge output too.
-    pt = inkextent_user().corner2
-    encompass(circle(pt, 50, :fill))
-    dbb = BoundingBox(dbb.corner1, pt + (50, 50))
-    @test all(inkextent_user() .== dbb)
-    @test get_scale_inkextents_margins() == sc
-    pic2 = snap()
-    @test pic2.width - pic1.width == sc * 50
-#end
+    @test boxwidth(bbn) / boxwidth(bbo) == 2
+    @test boxheight(bbo) / boxheight(bbn) == sc
+    @test round(get_scale_limiting(), digits = 5) == sc
+end
 
-#@testset "Rotation" begin
+@testset "User to device space: Zooming in" begin
     Drawing(NaN, NaN, :rec)
+    set_margins(Margins())
+    inkextent_reset()
+    background("chocolate")
+    bbo = inkextent_user()
+    #
+    # Set scaling transformation from user to device space.
+    sc = 4
+    scale(sc)
+    # i.e. (1,1) in user space now maps to (4, 4) in device space.
+    w = boxwidth(inkextent_user())
+    h = boxheight(inkextent_user())
+    @test w / boxwidth(bbo) == 0.25
+    @test boxheight(bbo) / h == sc
+    @test w == 184
+    setcolor("burlywood")
+    format = (x) -> string(Int64(round(x)))
+    dimension(O + (-w / 2, 50), O + (w / 2 , 50); format)
+    dimension(O, O + (w / 2 , 0); format)
+    dimension(O + (60, h / 2) , O + (60 , 0); format)
+    dimension(O + (70, h / 2) , O + (70 , -h / 2); format)
+    mark_inkextent()
+    pic1 = snap("""
+        User to device space: Zooming in
+        by calling `scale($sc)`.""")
+    # Drawing outside inkextents enlarges output too.
+    pt = inkextent_user().corner2
+    encompass(circle(pt, 50, :stroke))
+    dbb = BoundingBox(inkextent_user().corner1, pt + (50, 50))
+    @test all(inkextent_user() .== dbb)
+    @test get_scale_limiting() < sc
+    mark_inkextent()
+    pic2 = snap("""
+        We increased ink extents by (50,50 )
+        without changing user space scaling ($sc).
+
+        <small>snap()</small> will still output an image with
+        the same outside dimensions.
+
+        The scaling applied internally in 'snap' is:
+            <small>get_scale_limiting()</small> = $(round(get_scale_limiting(), digits=4)).
+        """)
+    # There's a 0 / 1 thing going on with png output. 799 ≈ 800 anyway.
+    @test abs(pic2.width - pic1.width) <= 1
+end
+
+@testset "Rotation" begin
+    Drawing(NaN, NaN, :rec)
+    set_margins(Margins())
     inkextent_reset()
     background("blanchedalmond")
     ubb = inkextent_user()
-    rect(ubb.corner1, boxwidth(ubb), boxheight(ubb), :fill)
+    w1 = boxwidth(ubb)
+    h1 = boxheight(ubb)
+    ad = atan(h1 / w1)
+    setopacity(0.5)
+    rect(ubb.corner1, w1, h1, :fill)
     snap()
     a = 30 * π / 180
     # x is right, y is down, positive z is into the canvas.
-    # Scaling to 0.5 means the output (user, canvas) is smaller than world drawing.
     # Hence, positive rotation around z means the output / the device projection is 
     # rotated positive around z. That is, clockwise as seen from negative z.
     rotate(a)
-    @test get_scale_inkextents_margins() == 1.0
-    setcolor("indigo")
-    rect(ubb.corner1, boxwidth(ubb), boxheight(ubb), :fill) |> encompass
-    rotate(-a) # Back to normal. What we did last should be rotated clockwise on the device output.
-    snap()
-    cb = BoundingBox(Point(-500, -500), Point(500, 500))
-    snapshot(;cb)
-    # I don't understand the above. I expected the previous to remain horizontal/ vertical,
-    # and the new output to be slanted.
-    #
-    # Try again by directly manipulating ctm
+    # This leads to scaling, which is complicated to foresee because
+    # the margins in output are kept the same after scaling.
+    @test round(get_scale_limiting(), digits = 4) == 0.7263
+    setopacity(0.3)
+    sethue("indigo")
+    # This demonstrates why we must keep track of
+    # ink extents in device space rather than in 'user / work' space:
+    # We're marking the inkextents in current user space,
+    # but we do not encompass the user space.
+    mark_inkextent()
+    rect(ubb.corner1, w1, h1, :fill) |> encompass
+    rotate(-a) # Back to normal. What we did last should be rotated clockwise
+                # at output.
+    setopacity(0.1)
+    mark_inkextent()
+    pic1 = snap("""
+        This demonstrates why we keep track of
+        ink extents in <i>device</i> space rather than in
+        <i>user / work</i> space:
+          1) Mark default <i>inkextent</i> - solid grey. It's slightly higher 
+             than wide because side margins are larger.
+          2) Set a clockwise rotation mapping from <i>user</i> to <i>device</i>.
+          3) Draw a solid indigo rectangle - same width and height.
+          4) Encompass the indigo rectangle, too, within <i>ink extent</i>.
+          5) Mark <small>inkextent_user()</small> - dashed.
+          6) Rotate back - <i>user</i> and <i>device</i> are aligned again
+          7) Mark <small>inkextent_user()</small> - dashed and lighter. 
+             This is larger than the solid grey one.
 
+        A scale mapping is applied during output, to fit ink extents 
+        as well as scaled margins within 800x800 points. 
+            <small>get_scale_limiting()</small> = $(round(get_scale_limiting(), digits=3))
+
+        In this case, width limits scaling. Output is 800 x 788.
+    """)
+    wr = boxwidth(inkextent_user()) / boxwidth(ubb)
+    wre = cos(ad - a) / cos(ad)
+    @test wr ≈ wre
+    @test abs(pic1.width - 800) <= 1
+    @test abs(pic1.height - 788) <= 1
+end
+
+@testset "Changing output size, blend background" begin
+    LIMITING_WIDTH[] = 400
+    LIMITING_HEIGHT[] = 300
     Drawing(NaN, NaN, :rec)
     inkextent_reset()
-    background("blanchedalmond")
-    ubb = inkextent_user()
-    rect(ubb.corner1, boxwidth(ubb), boxheight(ubb), :fill)
-    tm = [cos(a) -sin(a) 0.0; sin(a) cos(a) 0.0; 0.0 0.0 1.0]
-    setmatrix(juliatocairomatrix(tm))
-    setcolor("indigo")
-    rect(ubb.corner1, boxwidth(ubb), boxheight(ubb), :fill) |> encompass
-    snapshot(;cb)
-    # This is the exact same result as above. We continue to work in 'user space'...
-    snap()
-    # 
-
-
-    Drawing(NaN, NaN, :rec)
-    inkextent_reset()
-    background("blanchedalmond")
-    ubb = inkextent_user()
-    rect(ubb.corner1, boxwidth(ubb), boxheight(ubb), :fill)
-    pic1 = snap()
-    a = 10 * π / 180
-    # x is right, y is down, positive z is into the canvas.
-    # Scaling to 0.5 means the output (user, canvas) is smaller than world drawing.
-    # Hence, positive rotation around z means the output is rotated positive compared to world. 
-    rotate(a)
-    @test get_scale_inkextents_margins() == 1.0
-    setcolor("indigo")
-    rect(ubb.corner1, boxwidth(ubb), boxheight(ubb), :fill) |> encompass
-    pic2 = snap()
-    @test pic1.width == 800
-#    @test pic2.width == 800 * ---
-
-# TODO check this strange hypothesis: ctm is applied to drawing commands before they are stored.
-# Alternatively, rotate, draw, rotate back, output.
-# Other formulation: commands are applied to user space, its effect is stored in world coordinates.
+    set_margins(Margins())
+    w = boxwidth(inkextent_user())
+    h = boxheight(inkextent_user())
+    @test w == 336
+    @test h == 252
+    @test w + margins().l + margins().r == 400  
+    @test h + margins().t + margins().b == 300
+    # We're making a special kind of background here...
+    # .svg output is post-processed as normal.
+    orangered = blend(Point(-150, 0), Point(150, 0), "orange", "darkred")
+    rotate(π/3)
+    setblend(orangered)
+    paint()
+    rotate(-π/3)
+    setcolor("burlywood")
+    format = (x) -> string(Int64(round(x)))
+    dimension(O + (-w / 2, 50), O + (w / 2 , 50); format)
+    dimension(O, O + (w / 2 , 0); format)
+    dimension(O + (40, h / 2) , O + (40 , 0); format)
+    dimension(O + (100, h / 2) , O + (100 , -h / 2); format)
+    mark_inkextent()
+    pic1 = snap("""\r
+         <small>snap()</small> outputs 400 x 300. 
+         <small>get_scale_limiting()</small> = $(round(get_scale_limiting(), digits=4)).
+         svg colors ≠ png colors 
+    """)
+    @test abs(pic1.width - 400) <= 1
+    @test abs(pic1.height - 300) <= 1
+end
