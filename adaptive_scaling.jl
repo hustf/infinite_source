@@ -115,13 +115,14 @@ function overlay_file(f_overlay::Function, filename::String; fkwds...)
     if endswith(filename, ".svg")
         # Ref. https://github.com/lobingera/Rsvg.jl/issues/26 - the fix seems to be 
         # implemented for large strings, but not for reading directly from file.
-        if filename == "106.svg"
-            throw("holdit")
-        end
-        st = read(filename, String);
-        rimg = readsvg(st)
+        #if filename == "106.svg"
+        #    throw("holdit")
+        #end
+        #st = read(filename, String);
+        #rimg = readsvg(st)
         # The following line failed for a large file. The smallest file with failure was 9801Kb.
-        #rimg = readsvg(filename) 
+        # TEMP reinstated
+        rimg = readsvg(filename) 
     elseif endswith(filename, ".png")
         rimg = readpng(filename)
     else
