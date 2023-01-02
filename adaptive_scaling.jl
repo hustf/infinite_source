@@ -3,7 +3,7 @@
 # Margins, LIMITING_WIDTH / HEIGHT
 @assert Threads.nthreads() > 1
 using Revise, Luxor
-using Luxor: get_current_cr
+using Luxor: _get_current_cr
 import Luxor.Cairo
 using Cairo: user_to_device!, device_to_user!
 import Base.show
@@ -115,10 +115,13 @@ function overlay_file(f_overlay::Function, filename::String; fkwds...)
     if endswith(filename, ".svg")
         # Ref. https://github.com/lobingera/Rsvg.jl/issues/26 - the fix seems to be 
         # implemented for large strings, but not for reading directly from file.
+        if filename == "106.svg"
+            throw("holdit")
+        end
         st = read(filename, String);
         rimg = readsvg(st)
         # The following line failed for a large file. The smallest file with failure was 9801Kb.
-        #rimg1 = readsvg(filename) 
+        #rimg = readsvg(filename) 
     elseif endswith(filename, ".png")
         rimg = readpng(filename)
     else
@@ -164,7 +167,7 @@ const INK_EXTENT = Ref{BoundingBox}(inkextent_default())
 inkextent_set(m::BoundingBox) = INK_EXTENT[] = m
 
 """
-    update_INK_EXTENT(pt; c = get_current_cr())
+    update_INK_EXTENT(pt; c = _get_current_cr()()())
 
 Update a bounding box to include 'pt' mapped to device coordinates.
 
@@ -173,7 +176,7 @@ Update a bounding box to include 'pt' mapped to device coordinates.
 # Keyword argument
 - c     Pointer to the device context.
 """
-function update_INK_EXTENT(pt; c = get_current_cr())
+function update_INK_EXTENT(pt; c = _get_current_cr())
     # pt is in user coordinates, i.e., are affected by
     # possibly temporary translations and rotations.
     # We're storing the device / world coordinates instead.
@@ -182,7 +185,7 @@ function update_INK_EXTENT(pt; c = get_current_cr())
     nothing
 end
 """
-   device_point(pt; c = get_current_cr())
+   device_point(pt; c = _get_current_cr())
 
 Map from user to device coordinates. Related to 'getworldposition', 'getmatrix', 'juliatocairomatrix',
 'cairotojuliamatrix'.
@@ -192,7 +195,7 @@ Map from user to device coordinates. Related to 'getworldposition', 'getmatrix',
 # Keyword argument
 - c     Pointer to the device context.
 """
-function device_point(pt; c = get_current_cr())
+function device_point(pt; c = _get_current_cr())
     # There's a related function in Luxor, 'getworldposition()' we could use,
     # but it returns NaN for boundless recording surfaces.
     # This Cairo function doesn't actually modify the arguments like the '!' indicates.
@@ -210,7 +213,7 @@ Map from device to user coordinates. Related to 'getworldposition', 'getmatrix',
 # Keyword argument
 - c     Pointer to the device context.
 """
-function user_point(pt; c = get_current_cr())
+function user_point(pt; c = _get_current_cr())
     # This Cairo function doesn't actually modify the arguments like the '!' indicates.
     wx, wy = device_to_user!(c, [pt.x, pt.y])
     Point(wx, wy)
@@ -247,7 +250,7 @@ function inkextent_user()
     # Since rotation may be involved in the mapping,
     # two points do not describe a bounding box fully.
     wpts = four_corners(bb)
-    c = get_current_cr()
+    c = _get_current_cr()
     # Corners mapped to user coordinates
     upts = map(wpt-> user_point(wpt; c), wpts)
     BoundingBox(upts)
@@ -280,8 +283,8 @@ end
 Update inkextents to also include point or pts. 
 Pts may be a Vector, Tuple or other containers of points.
 """
-encompass(pt::Point; c = get_current_cr()) = update_INK_EXTENT(pt; c)
-function encompass(pts; c = get_current_cr())
+encompass(pt::Point; c = _get_current_cr()) = update_INK_EXTENT(pt; c)
+function encompass(pts; c = _get_current_cr())
     @assert isa(pts, Tuple) || !isbits(pts) "pts is a $(typeof(pts)). We can only encompass Point, and containers of Point."
     for pt in pts
         @assert pt isa Point "pt is not a Point, but a $(typeof(pt)), contained in a $(typeof(pts))."
