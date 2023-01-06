@@ -1,7 +1,12 @@
 # Imports, snap, etc.
-include("adaptive_scaling.jl")
-# We have some old images we won't overwrite. Start at:
-COUNTIMAGE.value = 99
+include("AdaptiveScaling.jl")
+using .AdaptiveScaling: countimage_setvalue, inkextent_set, encompass,
+    snap, get_scale_limiting, inkextent_user_with_margin, mark_inkextent
+using Test
+using Luxor
+# We have some old images we won't overwrite. Start after:
+countimage_setvalue(99)
+
 "A storage for some text since font scaling is hard"
 const SKI_DECAL = Ref{Path}(Path([PathClose()]))
 

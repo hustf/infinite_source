@@ -1,13 +1,16 @@
 # Imports, snap etc.:
-include("adaptive_scaling.jl")
+include("AdaptiveScaling.jl")
+using .AdaptiveScaling: countimage_setvalue
 using Test
-COUNTIMAGE.value = 49
+using Luxor
+# We have some old images we won't overwrite. Start after:
+countimage_setvalue(49)
 @testset "Viewport extension without work (user)-space scaling" begin
     Drawing(NaN, NaN, :rec)
     # Margins are set in 'output' points.
     # They are scaled to user coordinates where needed.
     m = margins()
-    t1, b1, l1, r1 = m.t, m.b, m.l, m.r
+    t1, b1, l1, r1 = m.t, m.b, m.l, m 
     m = set_margins(Margins())
     t2, b2, l2, r2 = m.t, m.b, m.l, m.r
     @test t1 == t2

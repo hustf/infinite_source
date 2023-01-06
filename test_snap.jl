@@ -1,6 +1,11 @@
 # Imports, snap etc.:
-include("adaptive_scaling.jl")
-COUNTIMAGE.value = 19
+include("AdaptiveScaling.jl")
+using .AdaptiveScaling: countimage_setvalue
+using Test
+using Luxor
+# We have some old images we won't overwrite. Start after:
+countimage_setvalue(19)
+
 using Test
 function overlay(; pt)
     # The origin here, o4, overlaps o1.
