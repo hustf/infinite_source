@@ -108,10 +108,8 @@ function overlay_file(f_overlay::Function, filename::String; fkwds...)
             throw(ArgumentError("Optional keywords: Use splatting in call: fkwds..."))
         end
     end
-    if Threads.nthreads() == 1 && Threads.threadid() == 1
-        @info "Running with one thread => The drawing in memory (if any) was overwritten."
-    end
-    @assert isfile(filename)
+
+    assert_file_and_secondary_thread(filename)
     if endswith(filename, ".svg")
         # Ref. https://github.com/lobingera/Rsvg.jl/issues/26 - the fix seems to be 
         # implemented for large strings, but not for reading directly from file.
@@ -126,7 +124,7 @@ function overlay_file(f_overlay::Function, filename::String; fkwds...)
     elseif endswith(filename, ".png")
         rimg = readpng(filename)
     else
-        error("Unknown file suffix for overlay: $filename")
+        throw("Unknown file suffix for overlay: $filename")
     end
     Drawing(rimg.width, rimg.height, filename)
     placeimage(rimg)
@@ -146,10 +144,12 @@ function overlay_file(f_overlay::Function, filename::String; fkwds...)
         # Reading the overlain svg is more complicated (often includes text)
         # than necessary, and errors are sometimes triggered at this step.
         #
-        # readsvg(filename)
-        out = readsvg("""<svg width="4pt" height="2pt">
-          <svg:ellipse cx="2pt" cy="4pt" rx="2pt" ry="1cpr" />
-        </svg>""")
+        #out = readsvg(filename)
+        #out = readsvg("""<svg width="4pt" height="2pt">
+        #  <svg:ellipse cx="2pt" cy="4pt" rx="2pt" ry="1cpr" />
+        #</svg>""")
+        st = read(filename, String);
+        out = readsvg(st)
     elseif endswith(filename, ".png")
         out = readpng(filename)
     else
@@ -347,7 +347,15 @@ function snap(f_overlay::Function, cb::BoundingBox, scalefactor::Float64; fkwds.
     COUNTIMAGE()
     fsvg = "$(COUNTIMAGE.value).svg"
     snapshot(fsvg, cb, scalefactor)
+    if isfile(fsvg)
+        printstyled("fsvg = $fsvg does exist now, threadid $(Threads.threadid()).\n", color=:green)
+    else
+        printstyled("fsvg = $fsvg does NOT exist now, threadid $(Threads.threadid()).\n", color =:176)
+    end
     sleep(0.1) # Let the file system catch up
+
+
+    println(Threads.threadid() , " thread no...")
     tsk = Threads.@spawn overlay_file(f_overlay, fsvg; fkwds...)
     res = fetch(tsk) # This triggers an error if the task failed, and shows stack traces.
     @assert res isa Luxor.SVGimage
@@ -356,10 +364,16 @@ function snap(f_overlay::Function, cb::BoundingBox, scalefactor::Float64; fkwds.
     # to snapshot.
     # Writing the corresponding svg was OK. The .svg file size was 6237 kB.
     if filesize(fsvg) > 6237000
+        throw("temporary stop here")
         @warn "The $fsvg file size was $(filesize(fsvg)/1000)kB > 6237kB. Rendering this as a png may allocate too much memory. Png output is dropped, and the svg is returned instead."
         return res
     else
         snapshot(fpng, cb, scalefactor)
+        if isfile(fpng)
+            printstyled("fpng = $fpng does exist now, threadid $(Threads.threadid()).\n", color=:green)
+        else
+            printstyled("fpng = $fpng does NOT exist now, threadid $(Threads.threadid()).\n", color =:176)
+        end
     end
     sleep(0.1) # Let the file system catch up
     tsk = Threads.@spawn overlay_file(f_overlay, fpng; fkwds...)
@@ -411,11 +425,31 @@ function get_scale_limiting(;s0 = 1)
     s
 end
 
-###############################
-#
-# Utilites for debugging below.
-#
-###############################
+"""
+    assert_file_and_secondary_thread(filename)
+    -> nothing or throws error
+We suspect file just made in one thread may "not exist" when
+instantly read in another thread.
+"""
+function assert_file_and_secondary_thread(filename)
+    if Threads.nthreads() == 1
+        printstyled("Creating overlay with one thread => The drawing in memory (if any) is overwritten.\n", color=:yellow)
+    end
+    if Threads.threadid() == 1
+        printstyled("Creating overlay in the first thread is unexpected. \nNormal usage is `Threads.@spawn overlay_file(...)`.\n", color=:yellow)
+        throw("Currently not allowed, debugging!")
+    end
+    print("filename = $filename in $(pwd()), threadid $(Threads.threadid()) ")
+    if isfile(filename)
+        printstyled("does exist.\n", color=:green)
+    else
+        printstyled("does NOT exist, threadid $(Threads.threadid()).\n", color =:176)
+        throw("probably timing issue")
+    end
+end
+########################################
+# Utilities for user and debugging below.
+########################################
 """
     distance_device_origin()
 
