@@ -108,19 +108,19 @@ function overlay_file(f_overlay::Function, filename::String; fkwds...)
             throw(ArgumentError("Optional keywords: Use splatting in call: fkwds..."))
         end
     end
-
-    assert_file_and_secondary_thread(filename)
+    assert_secondary_thread()
+    assert_file_exists(filename)
     if endswith(filename, ".svg")
         # Ref. https://github.com/lobingera/Rsvg.jl/issues/26 - the fix seems to be 
         # implemented for large strings, but not for reading directly from file.
         #if filename == "106.svg"
         #    throw("holdit")
         #end
-        #st = read(filename, String);
-        #rimg = readsvg(st)
+        st = read(filename, String);
+        rimg = readsvg(st)
         # The following line failed for a large file. The smallest file with failure was 9801Kb.
         # TEMP reinstated
-        rimg = readsvg(filename) 
+        #rimg = readsvg(filename) 
     elseif endswith(filename, ".png")
         rimg = readpng(filename)
     else
@@ -347,15 +347,7 @@ function snap(f_overlay::Function, cb::BoundingBox, scalefactor::Float64; fkwds.
     COUNTIMAGE()
     fsvg = "$(COUNTIMAGE.value).svg"
     snapshot(fsvg, cb, scalefactor)
-    if isfile(fsvg)
-        printstyled("fsvg = $fsvg does exist now, threadid $(Threads.threadid()).\n", color=:green)
-    else
-        printstyled("fsvg = $fsvg does NOT exist now, threadid $(Threads.threadid()).\n", color =:176)
-    end
-    sleep(0.1) # Let the file system catch up
-
-
-    println(Threads.threadid() , " thread no...")
+    assert_file_exists(fsvg)
     tsk = Threads.@spawn overlay_file(f_overlay, fsvg; fkwds...)
     res = fetch(tsk) # This triggers an error if the task failed, and shows stack traces.
     @assert res isa Luxor.SVGimage
@@ -364,18 +356,12 @@ function snap(f_overlay::Function, cb::BoundingBox, scalefactor::Float64; fkwds.
     # to snapshot.
     # Writing the corresponding svg was OK. The .svg file size was 6237 kB.
     if filesize(fsvg) > 6237000
-        throw("temporary stop here")
-        @warn "The $fsvg file size was $(filesize(fsvg)/1000)kB > 6237kB. Rendering this as a png may allocate too much memory. Png output is dropped, and the svg is returned instead."
+        @warn "The $fsvg file size was $(filesize(fsvg)/1000)kB > 6237kB. Rendering this as a png may allocate too much memory. \n .png output is dropped, and the svg image is returned instead."
         return res
     else
         snapshot(fpng, cb, scalefactor)
-        if isfile(fpng)
-            printstyled("fpng = $fpng does exist now, threadid $(Threads.threadid()).\n", color=:green)
-        else
-            printstyled("fpng = $fpng does NOT exist now, threadid $(Threads.threadid()).\n", color =:176)
-        end
+        assert_file_exists(fpng)
     end
-    sleep(0.1) # Let the file system catch up
     tsk = Threads.@spawn overlay_file(f_overlay, fpng; fkwds...)
     res = fetch(tsk) # This triggers an error if the task failed, and shows stack traces.
     res
@@ -428,25 +414,31 @@ end
 """
     assert_file_and_secondary_thread(filename)
     -> nothing or throws error
-We suspect file just made in one thread may "not exist" when
-instantly read in another thread.
 """
-function assert_file_and_secondary_thread(filename)
-    if Threads.nthreads() == 1
-        printstyled("Creating overlay with one thread => The drawing in memory (if any) is overwritten.\n", color=:yellow)
-    end
-    if Threads.threadid() == 1
-        printstyled("Creating overlay in the first thread is unexpected. \nNormal usage is `Threads.@spawn overlay_file(...)`.\n", color=:yellow)
-        throw("Currently not allowed, debugging!")
-    end
+function assert_file_exists(filename)
     print("filename = $filename in $(pwd()), threadid $(Threads.threadid()) ")
     if isfile(filename)
         printstyled("does exist.\n", color=:green)
     else
         printstyled("does NOT exist, threadid $(Threads.threadid()).\n", color =:176)
-        throw("probably timing issue")
+        throw("probably an issue with spawning a second thread?")
     end
 end
+"""
+    assert_secondary_thread()
+    -> nothing or throws error
+"""
+function assert_secondary_thread()
+    if Threads.nthreads() == 1
+        printstyled("Creating overlay with one thread => The drawing in memory (if any) is overwritten.\n", color=:yellow) 
+    end
+    if Threads.threadid() == 1
+        printstyled("Creating overlay while threadid() == 1 is unexpected. \nNormal usage is `Threads.@spawn overlay_file(...)`.\n", color=:yellow)
+        throw("Currently not allowed, debugging!")
+    end
+    Threads.nthreads() == 1 && throw("Minumum two threads required now.")
+end
+
 ########################################
 # Utilities for user and debugging below.
 ########################################
