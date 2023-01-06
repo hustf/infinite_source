@@ -6,6 +6,8 @@ using Revise, Luxor
 using Luxor: _get_current_cr
 import Luxor.Cairo
 using Cairo: user_to_device!, device_to_user!
+import ThreadPools
+using ThreadPools: @tspawnat
 import Base.show
 import Base.*
 "Ref. `set-margins`"
@@ -85,7 +87,7 @@ existing files, without finishing the current drawing in memory.
     finish()
     # Start working on another drawing in memory
     Drawing(NaN, NaN, :rec)
-    fetch(Threads.@spawn overlay_file("1.png", "ɯ-(ꞋʊꞋ)-ɯ"))
+    fetch(@tspawnat 2 overlay_file("1.png", "ɯ-(ꞋʊꞋ)-ɯ"))
     currentdrawing() # Drawing in memory survived!
 ```
 
@@ -108,7 +110,7 @@ function overlay_file(f_overlay::Function, filename::String; fkwds...)
             throw(ArgumentError("Optional keywords: Use splatting in call: fkwds..."))
         end
     end
-    assert_secondary_thread()
+    assert_background_thread()
     assert_file_exists(filename)
     if endswith(filename, ".svg")
         # Ref. https://github.com/lobingera/Rsvg.jl/issues/26 - the fix seems to be 
@@ -204,7 +206,7 @@ function device_point(pt; c = _get_current_cr())
     Point(wx, wy)
 end
 """
-   user_point(pt; c = get_current_cr())
+   user_point(pt; c = _get_current_cr())
 
 Map from device to user coordinates. Related to 'getworldposition', 'getmatrix', 'juliatocairomatrix',
 'cairotojuliamatrix'.
@@ -348,7 +350,7 @@ function snap(f_overlay::Function, cb::BoundingBox, scalefactor::Float64; fkwds.
     fsvg = "$(COUNTIMAGE.value).svg"
     snapshot(fsvg, cb, scalefactor)
     assert_file_exists(fsvg)
-    tsk = Threads.@spawn overlay_file(f_overlay, fsvg; fkwds...)
+    tsk = @tspawnat 2 overlay_file(f_overlay, fsvg; fkwds...)
     res = fetch(tsk) # This triggers an error if the task failed, and shows stack traces.
     @assert res isa Luxor.SVGimage
     fpng = "$(COUNTIMAGE.value).png"
@@ -362,7 +364,7 @@ function snap(f_overlay::Function, cb::BoundingBox, scalefactor::Float64; fkwds.
         snapshot(fpng, cb, scalefactor)
         assert_file_exists(fpng)
     end
-    tsk = Threads.@spawn overlay_file(f_overlay, fpng; fkwds...)
+    tsk = @tspawnat 2 overlay_file(f_overlay, fpng; fkwds...)
     res = fetch(tsk) # This triggers an error if the task failed, and shows stack traces.
     res
 end
@@ -425,15 +427,15 @@ function assert_file_exists(filename)
     end
 end
 """
-    assert_secondary_thread()
+    assert_background_thread()
     -> nothing or throws error
 """
-function assert_secondary_thread()
+function assert_background_thread()
     if Threads.nthreads() == 1
         printstyled("Creating overlay with one thread => The drawing in memory (if any) is overwritten.\n", color=:yellow) 
     end
     if Threads.threadid() == 1
-        printstyled("Creating overlay while threadid() == 1 is unexpected. \nNormal usage is `Threads.@spawn overlay_file(...)`.\n", color=:yellow)
+        printstyled("Creating overlay while threadid() == 1 is unexpected. \nNormal usage is `@tspawnat 2 overlay_file(...)`.\n", color=:yellow)
         throw("Currently not allowed, debugging!")
     end
     Threads.nthreads() == 1 && throw("Minumum two threads required now.")
