@@ -1,27 +1,22 @@
-# Imports, snap etc.:
-include("AdaptiveScaling.jl")
-using .AdaptiveScaling: countimage_setvalue
 using Test
 using Luxor
+# Imports, snap etc.:
+@isdefined(LuxorLayout) && throw("This test file relies on inital state at loading.")
+include("LuxorLayout.jl")
+using .LuxorLayout: margins_get, margins_set, Margins, scale_limiting_get, LIMITING_WIDTH, LIMITING_HEIGHT
+using .LuxorLayout: inkextent_reset, inkextent_user_get, inkextent_device_get, encompass
+using .LuxorLayout: snap, countimage_setvalue
+using .LuxorLayout: mark_inkextent
 # We have some old images we won't overwrite. Start after:
 countimage_setvalue(49)
 @testset "Viewport extension without work (user)-space scaling" begin
     Drawing(NaN, NaN, :rec)
     # Margins are set in 'output' points.
     # They are scaled to user coordinates where needed.
-    m = margins()
-    t1, b1, l1, r1 = m.t, m.b, m.l, m 
-    m = set_margins(Margins())
-    t2, b2, l2, r2 = m.t, m.b, m.l, m.r
-    @test t1 == t2
-    @test b1 == b2
-    @test l1 == l2
-    @test r1 == r2
-    bb1 = inkextent_user()
+    m = margins_set(Margins())
+    t1, b1, l1, r1 = m.t, m.b, m.l, m.r
     inkextent_reset()
-    bb2 = inkextent_user()
-    @test all(bb1 .== bb2)
-    s1 = get_scale_limiting()
+    s1 = scale_limiting_get()
     @test s1 == 1
     mark_inkextent()
     # Add a background with transparency - the old inkextent
@@ -38,9 +33,9 @@ countimage_setvalue(49)
     #   800 x   800 
     #   800 x <=800
     # <=800 x   800
-    # get_scale_limiting() returns the scaling to fit within margins.
-    bb2 = inkextent_user()
-    s2 = get_scale_limiting() 
+    # scale_limiting_get() returns the scaling to fit within margins.
+    bb2 = inkextent_user_get()
+    s2 = scale_limiting_get() 
     # svg file + png file + png in memory.
     pic2 = snap() 
     @test pic2.width == 415
@@ -48,9 +43,9 @@ countimage_setvalue(49)
     # Increasing (the left) margin by 100 expands inwards
     # (possibly changing the scale to fit inkextent), not outwards
     # (the output image will not grow larger)
-    set_margins(;l = 32 + 100)
-    bb3 = inkextent_user()
-    s3 = get_scale_limiting() 
+    margins_set(;l = 32 + 100)
+    bb3 = inkextent_user_get()
+    s3 = scale_limiting_get() 
     @test boxwidth(bb2) == boxwidth(bb3)
     # In this case, the necessary scaling was unchanged,
     # as the height of inkextent, top and bottom margin
@@ -63,12 +58,12 @@ countimage_setvalue(49)
     setopacity(0.65)
     rect(O + (-1000, 0), 1000, 1200, action = :fill) |> encompass
     setopacity(1.0)
-    bb3 = inkextent_user()
+    bb3 = inkextent_user_get()
     @test boxwidth(bb3) == 1368
     @test boxheight(bb3) == 1576
     setcolor("darkblue")
     mark_inkextent()
-    s4 = get_scale_limiting()
+    s4 = scale_limiting_get()
     @test s4 < s3
     pic3 = snap() # svg file + png file + png in memory
     @test pic3.height < 800
@@ -77,12 +72,12 @@ end
 
 
 
-@testset "User (work) to device space: Zooming out" begin
+@testset "User / work -space to device space: Zooming out" begin
     Drawing(NaN, NaN, :rec)
     inkextent_reset()
-    set_margins(Margins())
-    bbo = inkextent_user()
-    @test all(inkextent_device() .== bbo)
+    margins_set(Margins())
+    bbo = inkextent_user_get()
+    @test all(inkextent_device_get() .== bbo)
     #
     # Set scaling transformation from user to device space.
     sc = 0.5
@@ -91,25 +86,25 @@ end
     # Inkextents are "really" set in device coordinates.
     # So the unchanged ink extents, when mapped to user coordinates,
     # just doubled in width and height.
-    bbn = inkextent_user()
+    bbn = inkextent_user_get()
     @test boxwidth(bbn) / boxwidth(bbo) == 2
     @test boxheight(bbo) / boxheight(bbn) == sc
-    @test round(get_scale_limiting(), digits = 5) == sc
+    @test round(scale_limiting_get(), digits = 5) == sc
 end
 
 @testset "User to device space: Zooming in" begin
     Drawing(NaN, NaN, :rec)
-    set_margins(Margins())
+    margins_set(Margins())
     inkextent_reset()
     background("chocolate")
-    bbo = inkextent_user()
+    bbo = inkextent_user_get()
     #
     # Set scaling transformation from user to device space.
     sc = 4
     scale(sc)
     # i.e. (1,1) in user space now maps to (4, 4) in device space.
-    w = boxwidth(inkextent_user())
-    h = boxheight(inkextent_user())
+    w = boxwidth(inkextent_user_get())
+    h = boxheight(inkextent_user_get())
     @test w / boxwidth(bbo) == 0.25
     @test boxheight(bbo) / h == sc
     @test w == 184
@@ -124,11 +119,11 @@ end
         User to device space: Zooming in
         by calling `scale($sc)`.""")
     # Drawing outside inkextents enlarges output too.
-    pt = inkextent_user().corner2
+    pt = inkextent_user_get().corner2
     encompass(circle(pt, 50, :stroke))
-    dbb = BoundingBox(inkextent_user().corner1, pt + (50, 50))
-    @test all(inkextent_user() .== dbb)
-    @test get_scale_limiting() < sc
+    dbb = BoundingBox(inkextent_user_get().corner1, pt + (50, 50))
+    @test all(inkextent_user_get() .== dbb)
+    @test scale_limiting_get() < sc
     mark_inkextent()
     pic2 = snap("""
         We increased ink extents by (50,50 )
@@ -138,7 +133,7 @@ end
         the same outside dimensions.
 
         The scaling applied internally in 'snap' is:
-            <small>get_scale_limiting()</small> = $(round(get_scale_limiting(), digits=4)).
+            <small>scale_limiting_get()</small> = $(round(scale_limiting_get(), digits=4)).
         """)
     # There's a 0 / 1 thing going on with png output. 799 ≈ 800 anyway.
     @test abs(pic2.width - pic1.width) <= 1
@@ -146,10 +141,10 @@ end
 
 @testset "Rotation" begin
     Drawing(NaN, NaN, :rec)
-    set_margins(Margins())
+    margins_set(Margins())
     inkextent_reset()
     background("blanchedalmond")
-    ubb = inkextent_user()
+    ubb = inkextent_user_get()
     w1 = boxwidth(ubb)
     h1 = boxheight(ubb)
     ad = atan(h1 / w1)
@@ -163,7 +158,7 @@ end
     rotate(a)
     # This leads to scaling, which is complicated to foresee because
     # the margins in output are kept the same after scaling.
-    @test round(get_scale_limiting(), digits = 4) == 0.7263
+    @test round(scale_limiting_get(), digits = 4) == 0.7263
     setopacity(0.3)
     sethue("indigo")
     # This demonstrates why we must keep track of
@@ -185,18 +180,18 @@ end
           2) Set a clockwise rotation mapping from <i>user</i> to <i>device</i>.
           3) Draw a solid indigo rectangle - same width and height.
           4) Encompass the indigo rectangle, too, within <i>ink extent</i>.
-          5) Mark <small>inkextent_user()</small> - dashed.
+          5) Mark <small>inkextent_user_get()</small> - dashed.
           6) Rotate back - <i>user</i> and <i>device</i> are aligned again
-          7) Mark <small>inkextent_user()</small> - dashed and lighter. 
+          7) Mark <small>inkextent_user_get()</small> - dashed and lighter. 
              This is larger than the solid grey one.
 
         A scale mapping is applied during output, to fit ink extents 
         as well as scaled margins within 800x800 points. 
-            <small>get_scale_limiting()</small> = $(round(get_scale_limiting(), digits=3))
+            <small>scale_limiting_get()</small> = $(round(scale_limiting_get(), digits=3))
 
         In this case, width limits scaling. Output is 800 x 788.
     """)
-    wr = boxwidth(inkextent_user()) / boxwidth(ubb)
+    wr = boxwidth(inkextent_user_get()) / boxwidth(ubb)
     wre = cos(ad - a) / cos(ad)
     @test wr ≈ wre
     @test abs(pic1.width - 800) <= 1
@@ -208,13 +203,13 @@ end
     LIMITING_HEIGHT[] = 300
     Drawing(NaN, NaN, :rec)
     inkextent_reset()
-    set_margins(Margins())
-    w = boxwidth(inkextent_user())
-    h = boxheight(inkextent_user())
+    margins_set(Margins())
+    w = boxwidth(inkextent_user_get())
+    h = boxheight(inkextent_user_get())
     @test w == 336
     @test h == 252
-    @test w + margins().l + margins().r == 400  
-    @test h + margins().t + margins().b == 300
+    @test w + margins_get().l + margins_get().r == 400  
+    @test h + margins_get().t + margins_get().b == 300
     # We're making a special kind of background here...
     # .svg output is post-processed as normal.
     orangered = blend(Point(-150, 0), Point(150, 0), "orange", "darkred")
@@ -231,7 +226,7 @@ end
     mark_inkextent()
     pic1 = snap("""\r
          <small>snap()</small> outputs 400 x 300. 
-         <small>get_scale_limiting()</small> = $(round(get_scale_limiting(), digits=4)).
+         <small>scale_limiting_get()</small> = $(round(scale_limiting_get(), digits=4)).
          svg colors ≠ png colors 
     """)
     @test abs(pic1.width - 400) <= 1

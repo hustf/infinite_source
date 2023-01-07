@@ -1,18 +1,27 @@
-# Imports, snap etc.:
-include("AdaptiveScaling.jl")
-using .AdaptiveScaling: countimage_setvalue
 using Test
 using Luxor
+# Imports, snap etc.:
+include("LuxorLayout.jl")
+using .LuxorLayout: margins_get, scale_limiting_get
+using .LuxorLayout: inkextent_reset, inkextent_user_get, encompass,
+     device_point, inkextent_user_with_margin
+using .LuxorLayout: snap, countimage_setvalue
+using .LuxorLayout: mark_cs
+
 # We have some old images we won't overwrite. Start after:
 countimage_setvalue(19)
 
-using Test
-function overlay(; pt)
+
+"Noone likes decimal points"
+roundpt(pt) = Point(round(pt.x), round(pt.y))
+
+"An overlay showing coordinate systems: user, device, output"
+function t_overlay(; pt)
     # The origin here, o4, overlaps o1.
-    markcs(O; labl = "o4", color = "black", r = 70, dir=:SW)
-    markcs(roundpt(pt); labl = "pt4", color = "white", r = 80, dir=:SE)
+    mark_cs(O; labl = "o4", color = "black", r = 70, dir=:SW)
+    mark_cs(roundpt(pt); labl = "pt4", color = "white", r = 80, dir=:SE)
     translate(pt)
-    markcs(O; labl = "o5", color = "navy", r = 90, dir=:E)
+    mark_cs(O; labl = "o5", color = "navy", r = 90, dir=:E)
 end 
 
 @testset "Target a user space point in an overlay." begin
@@ -21,22 +30,22 @@ end
         background("coral")
         inkextent_reset()
         sethue("grey")
-        markcs(O, labl = "o1", color = "red", r = 20)
+        mark_cs(O, labl = "o1", color = "red", r = 20)
         p = O + (200, -50)
         p |> encompass
         θ = π / 6
-        markcs(p, labl = "p1", dir =:S, color = "green", r = 30)
+        mark_cs(p, labl = "p1", dir =:S, color = "green", r = 30)
         brush(O, p, 2)
         translate(p)
-        markcs(O, labl = "o2", dir =:E, color = "blue", r = 40)
+        mark_cs(O, labl = "o2", dir =:E, color = "blue", r = 40)
         rotate(-θ)
-        markcs(O, labl = "o3", dir =:NW, color = "yellow", r = 50)
+        mark_cs(O, labl = "o3", dir =:NW, color = "yellow", r = 50)
         @test device_point(O) == p 
-        outscale = get_scale_limiting()
+        outscale = scale_limiting_get()
         cb = inkextent_user_with_margin()
         # The origin of output in user coordinates:
         pto = midpoint(cb)
-        markcs(roundpt(pto), labl = "pto", dir =:SE, color = "indigo", r = 60)
+        mark_cs(roundpt(pto), labl = "pto", dir =:SE, color = "indigo", r = 60)
         # The current user origin in output coordinates
         pt = (O - pto) * outscale
         snapshot(;cb, scalefactor = outscale) # No overlay, no file output
@@ -66,32 +75,32 @@ end
             Here, we define <small>overlay(;pt)</small>. The value of 'pt' can change.
             """)
         # `snap` will gobble up any keywords and pass them on to 'overlay'.
-        snap(overlay, cb, outscale; pt)
+        snap(t_overlay, cb, outscale; pt)
     end
     @testset "Rotation and also ink extension." begin
         Drawing(NaN, NaN, :rec)
         background("darksalmon")
         inkextent_reset()
         sethue("grey")
-        markcs(O, labl = "o1", color = "red", r = 20)
+        mark_cs(O, labl = "o1", color = "red", r = 20)
         p = O + 3 .* (200, -50)
         p |> encompass
         θ = π / 6
-        markcs(p, labl = "p1", dir =:S, color = "green", r = 30)
+        mark_cs(p, labl = "p1", dir =:S, color = "green", r = 30)
         brush(O, p, 2)
         translate(p)
-        markcs(O, labl = "o2", dir =:E, color = "blue", r = 40)
+        mark_cs(O, labl = "o2", dir =:E, color = "blue", r = 40)
         rotate(-θ)
-        markcs(O, labl = "o3", dir =:NW, color = "yellow", r = 50)
+        mark_cs(O, labl = "o3", dir =:NW, color = "yellow", r = 50)
         @test device_point(O) == p 
-        outscale = get_scale_limiting()
+        outscale = scale_limiting_get()
         cb = inkextent_user_with_margin()
         # The origin of output in user coordinates:
         pto = midpoint(cb)
-        markcs(roundpt(pto), labl = "pto", dir =:SE, color = "indigo", r = 60)
+        mark_cs(roundpt(pto), labl = "pto", dir =:SE, color = "indigo", r = 60)
         # The current user origin in output coordinates
         pt = (O - pto) * outscale
         snapshot(;cb, scalefactor = outscale)  # No overlay, no file output
-        snap(overlay, cb, outscale; pt)
+        snap(t_overlay, cb, outscale; pt)
     end
 end
