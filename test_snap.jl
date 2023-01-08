@@ -4,9 +4,9 @@ using Luxor
 include("LuxorLayout.jl")
 using .LuxorLayout: margins_get, scale_limiting_get
 using .LuxorLayout: inkextent_reset, inkextent_user_get, encompass,
-     device_point, inkextent_user_with_margin
+     point_device_get, inkextent_user_with_margin
 using .LuxorLayout: snap, countimage_setvalue
-using .LuxorLayout: mark_cs
+using .LuxorLayout: mark_cs, rotation_device_get
 
 # We have some old images we won't overwrite. Start after:
 countimage_setvalue(19)
@@ -25,7 +25,7 @@ function t_overlay(; pt)
 end 
 
 @testset "Target a user space point in an overlay." begin
-    @testset "Rotation, but no ink extension past default." begin
+    @testset "Rotation, but no ink extension past default. Pic. 20 -21" begin
         Drawing(NaN, NaN, :rec)
         background("coral")
         inkextent_reset()
@@ -40,7 +40,7 @@ end
         mark_cs(O, labl = "o2", dir =:E, color = "blue", r = 40)
         rotate(-θ)
         mark_cs(O, labl = "o3", dir =:NW, color = "yellow", r = 50)
-        @test device_point(O) == p 
+        @test point_device_get(O) == p 
         outscale = scale_limiting_get()
         cb = inkextent_user_with_margin()
         # The origin of output in user coordinates:
@@ -77,7 +77,7 @@ end
         # `snap` will gobble up any keywords and pass them on to 'overlay'.
         snap(t_overlay, cb, outscale; pt)
     end
-    @testset "Rotation and also ink extension." begin
+    @testset "Rotation and also ink extension. Pic. 22" begin
         Drawing(NaN, NaN, :rec)
         background("darksalmon")
         inkextent_reset()
@@ -91,8 +91,9 @@ end
         translate(p)
         mark_cs(O, labl = "o2", dir =:E, color = "blue", r = 40)
         rotate(-θ)
+        @test rotation_device_get() ≈ -θ
         mark_cs(O, labl = "o3", dir =:NW, color = "yellow", r = 50)
-        @test device_point(O) == p 
+        @test point_device_get(O) == p 
         outscale = scale_limiting_get()
         cb = inkextent_user_with_margin()
         # The origin of output in user coordinates:

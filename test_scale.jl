@@ -4,12 +4,13 @@ using Luxor
 @isdefined(LuxorLayout) && throw("This test file relies on inital state at loading.")
 include("LuxorLayout.jl")
 using .LuxorLayout: margins_get, margins_set, Margins, scale_limiting_get, LIMITING_WIDTH, LIMITING_HEIGHT
-using .LuxorLayout: inkextent_reset, inkextent_user_get, inkextent_device_get, encompass
+using .LuxorLayout: inkextent_reset, inkextent_user_get, inkextent_device_get, encompass,
+     point_device_get, point_user_get
 using .LuxorLayout: snap, countimage_setvalue
 using .LuxorLayout: mark_inkextent
 # We have some old images we won't overwrite. Start after:
 countimage_setvalue(49)
-@testset "Viewport extension without work (user)-space scaling" begin
+@testset "Viewport extension without work (user)-space scaling. Pic. 50-52" begin
     Drawing(NaN, NaN, :rec)
     # Margins are set in 'output' points.
     # They are scaled to user coordinates where needed.
@@ -72,7 +73,7 @@ end
 
 
 
-@testset "User / work -space to device space: Zooming out" begin
+@testset "User / work -space to device space: Zooming out. No pic." begin
     Drawing(NaN, NaN, :rec)
     inkextent_reset()
     margins_set(Margins())
@@ -92,7 +93,7 @@ end
     @test round(scale_limiting_get(), digits = 5) == sc
 end
 
-@testset "User to device space: Zooming in" begin
+@testset "User to device space: Zooming in. Pic. 53-54" begin
     Drawing(NaN, NaN, :rec)
     margins_set(Margins())
     inkextent_reset()
@@ -139,7 +140,7 @@ end
     @test abs(pic2.width - pic1.width) <= 1
 end
 
-@testset "Rotation" begin
+@testset "Rotation. Pic. 56" begin
     Drawing(NaN, NaN, :rec)
     margins_set(Margins())
     inkextent_reset()
@@ -198,7 +199,7 @@ end
     @test abs(pic1.height - 788) <= 1
 end
 
-@testset "Changing output size, blend background" begin
+@testset "Changing output size, blend background. Pic. 57" begin
     LIMITING_WIDTH[] = 400
     LIMITING_HEIGHT[] = 300
     Drawing(NaN, NaN, :rec)
@@ -231,4 +232,58 @@ end
     """)
     @test abs(pic1.width - 400) <= 1
     @test abs(pic1.height - 300) <= 1
+end
+@testset "Transform both ways - translate" begin
+    Drawing(NaN, NaN, :rec)
+    background("orange")
+    @test point_device_get(O) == O
+    @test point_user_get(O) == O
+    translate(O + (100, 0))
+    @test point_device_get(O) == O + (100, 0)
+    @test point_user_get( O + (100, 0)) == O 
+end
+@testset "Transform both ways - translate 2" begin
+    Drawing(NaN, NaN, :rec)
+    @test point_device_get(O) == O
+    @test point_user_get(O) == O
+    translate(O + (100, 100))
+    @test point_device_get(O) == O + (100, 100)
+    @test point_user_get( O + (100, 100)) == O 
+end
+
+@testset "Transform both ways - rotate " begin
+    Drawing(NaN, NaN, :rec)
+    @test point_device_get(O) == O
+    @test point_user_get(O) == O
+    rotate(atan(1))
+    pu = O + (100, 0)
+    pd =  O + cos(atan(1)) .* (100, 100)
+    @test point_device_get(pu) == pd
+    @test point_user_get(pd) == pu 
+end
+@testset "Transform both ways - transform " begin
+    Drawing(NaN, NaN, :rec)
+    @test point_device_get(O) == O
+    @test point_user_get(O) == O
+    rotate(atan(1))
+    translate(O + (100, 0))
+    pu = O
+    pd =  O + cos(atan(1)) .* (100, 100)
+    @test point_device_get(pu) == pd
+    @test point_user_get(pd) == pu 
+end
+@testset "Transform both ways - opposite order transform " begin
+    Drawing(NaN, NaN, :rec)
+    @test point_device_get(O) == O
+    @test point_user_get(O) == O
+    translate(O + (100, 0))
+    rotate(atan(1))
+    pu = O
+    pd =  O + (100, 0)
+    @test point_device_get(pu) == pd
+    @test point_user_get(pd) == pu
+    pu1 = O + (100, 0)
+    pd1 =  O + (100, 0) + cos(atan(1)) .* (100, 100)
+    @test point_device_get(pu1) == pd1
+    @test point_user_get(pd1) == pu1 
 end

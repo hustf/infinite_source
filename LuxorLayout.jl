@@ -101,7 +101,7 @@ end
 #   encompass, inkextent_user_with_margin
 #   inkextent_reset, inkextent_user_get, 
 #   inkextent_set, inkextent_device_get, 
-#   device_point
+#   point_device_get, point_user_get
 #########################################
 
 """
@@ -136,44 +136,9 @@ function inkextent_extend(pt; c = _get_current_cr())
     # pt is in user coordinates, i.e., are affected by
     # possibly temporary translations and rotations.
     # We're storing the device / world coordinates instead.
-    wpt = device_point(pt)
+    wpt = point_device_get(pt)
     INK_EXTENT[] += BoundingBox(wpt, wpt)
     nothing
-end
-"""
-   device_point(pt; c = _get_current_cr())
-
-`getworldposition`, but works for limitless surfaces too.
-Map from user to device coordinates. Related to 'getworldposition', 
-'getmatrix', 'juliatocairomatrix', 'cairotojuliamatrix'.
-
-# Argument
-- pt    Point in user coordinate system.
-# Keyword argument
-- c     Pointer to the device context.
-"""
-function device_point(pt; c = _get_current_cr())
-    # There's a related function in Luxor, 'getworldposition()' we could use,
-    # but it returns NaN for boundless recording surfaces.
-    # This Cairo function doesn't actually modify the arguments like the '!' indicates.
-    wx, wy = user_to_device!(c, [pt.x, pt.y])
-    Point(wx, wy)
-end
-"""
-   user_point(pt; c = _get_current_cr())
-
-Map from device to user coordinates. Related to 'getworldposition', 'getmatrix', 'juliatocairomatrix',
-'cairotojuliamatrix'.
-
-# Argument
-- pt    Point in user coordinate system.
-# Keyword argument
-- c     Pointer to the device context.
-"""
-function user_point(pt; c = _get_current_cr())
-    # This Cairo function doesn't actually modify the arguments like the '!' indicates.
-    wx, wy = device_to_user!(c, [pt.x, pt.y])
-    Point(wx, wy)
 end
 
 """
@@ -211,7 +176,7 @@ function inkextent_user_get()
     wpts = four_corners(bb)
     c = _get_current_cr()
     # Corners mapped to user coordinates
-    upts = map(wpt-> user_point(wpt; c), wpts)
+    upts = map(wpt-> point_user_get(wpt; c), wpts)
     BoundingBox(upts)
 end
 
@@ -250,6 +215,44 @@ function encompass(pts; c = _get_current_cr())
         encompass(pt; c)
     end
     nothing
+end
+
+"""
+   point_device_get(pt; c = _get_current_cr())
+
+`getworldposition`, but works for limitless surfaces too.
+Map from user to device coordinuser_pointates. Related to 'getworldposition', 
+'getmatrix', 'juliatocairomatrix', 'cairotojuliamatrix'.
+
+# Argument
+- pt    Point in user coordinate system.
+# Keyword argument
+- c     Pointer to the device context.
+"""
+function point_device_get(pt; c = _get_current_cr())
+    # There's a related function in Luxor, 'getworldposition()' we could use,
+    # but it returns NaN for boundless recording surfaces.
+    # This Cairo function doesn't actually modify the arguments like the '!' indicates.
+    wx, wy = user_to_device!(c, [pt.x, pt.y])
+    Point(wx, wy)
+end
+"""
+   point_user_get(pt; c = _get_current_cr())
+
+Map from device to user coordinates. Related to 'getworldposition', 'getmatrix', 'juliatocairomatrix',
+'cairotojuliamatrix'.
+
+Transform a coordinate from device space to user space by multiplying the given point by the inverse of the current transformation matrix (CTM).
+
+# Argument
+- pt    Point in user coordinate system.
+# Keyword argument
+- c     Pointer to the device context.
+"""
+function point_user_get(pt; c = _get_current_cr())
+    # This Cairo function doesn't actually modify the arguments like the '!' indicates.
+    wx, wy = device_to_user!(c, [pt.x, pt.y])
+    Point(wx, wy)
 end
 
 
@@ -327,7 +330,7 @@ function overlay_file(f_overlay::Function, filename::String; fkwds...)
     if endswith(filename, ".svg")
         # Reading the overlain svg is more complicated (often includes text)
         # than necessary, and errors are sometimes triggered at this step.
-        # Currently, there is no size limit set here.
+        # Still, there is no size limit set here.
         st = read(filename, String);
         out = readsvg(st)
     elseif endswith(filename, ".png")
@@ -431,43 +434,60 @@ You can also pass keyword argument to that function, for example telling it abou
 function snap(f_overlay::Function, cb::BoundingBox, scalefactor::Float64; fkwds...)
     # Update counter to the next value.
     COUNTIMAGE()
-    #print("a")
     fsvg = "$(COUNTIMAGE.value).svg"
     snapshot(fsvg, cb, scalefactor)
-    #print("b")
     assert_file_exists(fsvg)
     tsk = @tspawnat 2 overlay_file(f_overlay, fsvg; fkwds...)
     res = fetch(tsk) # This triggers an error if the task failed, and shows stack traces.
-    #print("d")
     @assert res isa Luxor.SVGimage
     if res.width == 1.0 && res.height == 1.0
         println()
         @warn("After adding overlay, the file $fsvg has width 1.0 and height 1.0 and may be corrupted. 
-              Rendering this as a .png may allocate too much memory. 
+              Rendering this as a .png might cause crashes. 
               .png output is dropped, and the corrupt svg image is returned instead.
               Examine $fsvg to find out why!")
         return res
     end
-    #print("e")
     fpng = "$(COUNTIMAGE.value).png"
     # Crashes experienced during Cairo.paint() within the following call
-    # to snapshot. Seems related to large allocations.
-    # Writing the corresponding svg was OK. The .svg file size was 6237 kB.
-    sizelimit = 6237
-    if filesize(fsvg) > sizelimit * 1000
+    # to snapshot as png. 
+    # We have no definite criterion, but we have this complicated process:
+    w = round(boxwidth(cb))
+    h = round(boxheight(cb))
+    ws = round(w * scalefactor)
+    hs = round(h * scalefactor)
+    pixlim = 5.7e9
+    pixsoftlim = 5.293e9
+    if w * h > pixlim
         println()
-        @warn("The $fsvg file size was $(filesize(fsvg)/1000) kB > $sizelimit kB. 
-               Rendering this as a .png may allocate too much memory. 
-               .png output is dropped, and the svg image is returned instead.")
+        @warn("crop box w·h > $pixlim @$(fpng)
+                .png output is dropped, and the svg image is returned instead.")
         return res
-    else
-        snapshot(fpng, cb, scalefactor)
-        assert_file_exists(fpng)
+    elseif w * h > pixsoftlim
+        println()
+        @warn("Rendering this as $fpng may allocate too much memory. 
+                Crop box width is $w, height $h, w·h = $(w * h) < limit $pixlim.
+                Scaled width is $ws, height $hs, ws·hs = $(ws * hs)
+                We may try anyway, good luck!")
     end
-    #print("g")
+    if ws > 32767 || hs > 32767
+        println()
+        @warn("Rendering this as $fpng exceeds limits for crop box.
+              w = $w > 32767 || h = $h > 32767
+              ws = $ws          hs = $hs 
+             We try anyway, good luck!")
+    end
+    sizelim = 5626310
+    if filesize(fsvg) > sizelim && w * h > pixsoftlim
+        @warn("filesize = $(round(filesize(fsvg) /1000 ))kB > sizelim = $(round(sizelim /1000 ))kB
+             .png output is dropped, and the svg image is returned instead.")
+        return res
+    end
+    printstyled("\t filesize($fsvg) = $(filesize(fsvg)/1000)kB\n", color=:grey)
+    snapshot(fpng, cb, scalefactor)
+    assert_file_exists(fpng)
     tsk = @tspawnat 2 overlay_file(f_overlay, fpng; fkwds...)
     res = fetch(tsk) # This triggers an error if the task failed, and shows stack traces.
-    #print("h")
     res
 end
 function snap(f_overlay::Function; fkwds...)
@@ -531,7 +551,7 @@ snap() = snap( () -> nothing, inkextent_user_with_margin(), scale_limiting_get()
 What is the distance in user space points due to all of our
 transformations so far? How far has the origin moved?
 """
-distance_device_origin() = Int64(round(hypot(device_point(Point(0.0,0.0))...)))
+distance_device_origin() = Int64(round(hypot(point_device_get(Point(0.0,0.0))...)))
 
 
 """
@@ -552,7 +572,11 @@ function mark_inkextent()
     nothing
 end
 
-"For debugging. Position + axis orientation."
+"""
+    mark_cs(p; labl = "", color = "", r = 50, dir=:S)
+
+For debugging. Position + axis orientation. Similar to `rulers`.
+"""
 function mark_cs(p; labl = "", color = "", r = 50, dir=:S)
     @layer begin
         setopacity(0.5)
@@ -560,10 +584,37 @@ function mark_cs(p; labl = "", color = "", r = 50, dir=:S)
         circle(p, r,:stroke)
         line(p, p + (r, 0), :stroke)
         line(p, p + (0, r), :stroke)
-        rulers()
         setopacity(1.0)
         label("$labl $p", dir, p; leader=true)
     end
 end
+
+"""
+    rotation_device_get()
+    -> ∈[-π, π>
+Assuming no shear transformation is applied, how much is
+user space currently rotated with regards to device space?
+
+Sign:
+  - x is right 
+  - y is down
+  - z is in 
+  => positive angle is clockwise
+
+NOTE: Cairo is not always updated after calling rotate(). This is experimental.
+"""
+function rotation_device_get()
+    u = Point(1, 0) - O
+    du = point_user_get(Point(1,0)) - point_user_get(O)
+    @assert hypot(u...) > 0 && hypot(du...) > 0
+    d = du / hypot(du...)
+    y = d.x * u.y - d.y * u.x
+    x = d.x * u.x + d.y * u.y
+    @assert hypot(y, x) == 1
+    atan(y, x)
+end
+
+
+
 end # module
 nothing

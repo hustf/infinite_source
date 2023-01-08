@@ -3,7 +3,8 @@ using Luxor
 # Imports, snap, etc.
 include("LuxorLayout.jl")
 using .LuxorLayout: margins_set, Margins, scale_limiting_get
-using .LuxorLayout: encompass, inkextent_set, inkextent_reset, inkextent_user_with_margin
+using .LuxorLayout: encompass, inkextent_set, inkextent_reset, 
+    inkextent_user_with_margin, point_device_get, point_user_get
 using .LuxorLayout: snap, countimage_setvalue, text_on_overlay
 using .LuxorLayout: mark_inkextent, distance_device_origin
 # We have some old images we won't overwrite. Start after:
@@ -32,9 +33,9 @@ include("drawingfuncs.jl")
 #
 #############################################################
 
-###
-# 1
-###
+#####
+# 100
+#####
 Drawing(NaN, NaN, :rec)
 background("snow1")
 # In this first image, we're going to zoom in when making an image.
@@ -52,7 +53,17 @@ pto = midpoint(cb)
 pt = (O - pto) * outscale
 mark_inkextent()
 snapshot(;cb, scalefactor = outscale) # No overlay, no file output
-function sn_overlay(;pt, scale, txt)
+function sn_overlay(;pt, scale, txt, markdistance = false, startpt = O)
+    if markdistance
+        @layer begin
+            setopacity(0.5)
+            sethue("blue")
+            format(x) = string(Int(round(x / (100 * scale)))) * "m"
+            offset = -20
+            textrotation = -π / 2 -atan(startpt.y - pt.y, startpt.x - pt.x)
+            dimension(pt, startpt; format, offset, textrotation)
+        end
+    end
     @layer begin
         translate(pt)
         ski_tourist(;scale)
@@ -66,9 +77,9 @@ protect against the sun while skiing.
 """
 snap(sn_overlay, cb, outscale; pt, scale = outscale, txt)
 
-###
-# 2
-###
+#####
+# 101
+#####
 
 p, θₑ = trail_next_length(283, 0, 0.00095, 0)
 translate(p)
@@ -86,9 +97,9 @@ snowblind. And turn to veering off course.
 """
 snap(sn_overlay, cb, outscale; pt, scale = outscale, txt)
 
-###
-# 3
-###
+#####
+# 102
+#####
 # Revert to default margins
 margins_set(Margins())
 inkextent_reset() # Back to scale 1:1 for 800x800 pixels
@@ -109,9 +120,9 @@ Then again, the students were sober.
 """
 snap(sn_overlay, cb, outscale; pt, scale = outscale, txt)
 
-###
-# 4
-###
+#####
+# 103
+#####
 
 Drawing(NaN, NaN, :rec)
 background("snow2")
@@ -132,9 +143,9 @@ pt = (O - midpoint(cb)) * outscale
 mark_inkextent()
 snap(sn_overlay, cb, outscale; pt, scale = outscale, txt)
 
-###
-# 5
-###
+#####
+# 104
+#####
 
 Drawing(NaN, NaN, :rec)
 background("snow2")
@@ -152,8 +163,8 @@ Professor expects to walk in Euler spirals, not circles.
     setopacity(0.2)
     circle(O + (0, r), r, :fill) |> encompass
 end
-angvel = randn(20) * θ´max / 2.25
-angacc = randn(20) * θ´max / (2.25 * 100^2)
+angvel = randn(50) * θ´max / 2.25
+angacc = randn(50) * θ´max / (2.25 * 100^2)
 for (a, acc) in zip(angvel, angacc)
     trail_next_length(10000, 0, a, acc)
 end
@@ -163,9 +174,9 @@ pt = (O - midpoint(cb)) * outscale
 mark_inkextent()
 snap(sn_overlay, cb, outscale; pt, scale = outscale, txt)
 
-###
-# 6
-###
+#####
+# 105
+#####
 
 Drawing(NaN, NaN, :rec)
 background("snow2")
@@ -194,25 +205,27 @@ Mr. Professor, steeped in knowledge, decides to:
 After the first random step, direct 
 distance from start is $(distance_device_origin() / 100)m.
 """
-snap(sn_overlay, cb, outscale; pt, scale = outscale, txt)
+# Device origin referred to user space
+odu = point_user_get(O)
+startpt = (odu - midpoint(cb)) * outscale
+snap(sn_overlay, cb, outscale; pt, scale = outscale, txt, markdistance = true, startpt) 
 
-###
-# 7
-###
 
-N = 500
+###########
+# 106,-1000
+###########
 
+N = 890
 println("Random step no: ")
 for i = 2:N
     local cb, outscale, pt = randomstep()
-    print(i, " ")
-    if i == N
+    if i == 2 || 100 < i < 167 || i == N
         local txt = """
         After $i 'random steps' and walking $(round(i * 0.053; digits = 1))km, 
-        his straight distance from start is just $(distance_device_origin() / 100)m.
+        his straight distance from start is just $(Int(round(distance_device_origin() / 100)))m.
         You may need to zoom in to see the trail?
         
-        Mr. Professor now realizes what a poor sod he is, 
+        Mr. Professor realizes what a poor sod he is, 
         stuck in a nightmare statistics example.
 
         Why didn't he
@@ -220,7 +233,11 @@ for i = 2:N
         - use sunglasses?
         - give certain students better marks?
         """
-        global sn = snap(sn_overlay, cb, outscale; pt, scale = outscale, txt)
+        local startpt = (point_user_get(O)- midpoint(cb)) * outscale
+        # This call marks the distance to start in the overlay.
+        global sn = snap(sn_overlay, cb, outscale; pt, scale = outscale, txt, markdistance = true, startpt)
+    else
+        print(i, " ")
     end
 end
 println()
