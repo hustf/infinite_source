@@ -265,6 +265,10 @@ end
 #    This is normally run in a second
 #    thread with a separate Cairo 
 #    instance.
+#
+#   byte_description, overlay_file,
+#   assert_second_thread, 
+#   assert_file_exists
 ##################################
 const LIMIT_fsize_read_svg = 13705152
 """
@@ -390,8 +394,10 @@ byte_description(x) = string(Int64(round(x / 1000))) * "kB "
 #  4 Snap
 #     -> png and svg sequential files
 #     -> png in memory
-#     uses a second thread
-#     to add overlays.
+#     uses a second thread to add overlays.
+#
+#    snap, countimage, countimage_setvalue,
+#    text_on_overlay
 #####################################
 const LIMIT_fsize_render_to_png = 5626310
 const LIMIT_pixel_render_to_png  = 32767
@@ -507,7 +513,7 @@ end
 snap(txt::String) = snap() do
     text_on_overlay(txt)
 end
-
+snap() = snap( () -> nothing, inkextent_user_with_margin(), scale_limiting_get())
 
 """
     text_on_overlay(txt; 
@@ -547,13 +553,13 @@ function text_on_overlay(txt;
     tl = O + (x, y + em * lins)
     settext(ctext, tl; markup=true)
 end
-snap() = snap( () -> nothing, inkextent_user_with_margin(), scale_limiting_get())
-
-
 
 
 ##########################################
 # 5 Utilities for user and debugging below
+#   distance_to_device_origin_get, 
+#   mark_inkextent, mark_cs, 
+#   rotation_device_get
 ##########################################
 """
     distance_to_device_origin_get()
