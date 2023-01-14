@@ -5,7 +5,9 @@ using Luxor
 # Currently, we can read svgs, but we can't get
 # their actual extents on screen (which is larger than
 # the area that actually has content).
-include("LuxorLayout.jl")
+if ! @isdefined LuxorLayout
+    include("LuxorLayout.jl")
+end
 using .LuxorLayout: byte_description, LIMIT_fsize_read_svg
 
 # I made these from a bitmap, a fair use of the LP cover.

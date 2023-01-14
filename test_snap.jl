@@ -1,7 +1,9 @@
 using Test
 using Luxor
 # Imports, snap etc.:
-include("LuxorLayout.jl")
+if ! @isdefined LuxorLayout
+    include("LuxorLayout.jl")
+end
 using .LuxorLayout: margins_get, scale_limiting_get
 using .LuxorLayout: inkextent_reset, inkextent_user_get, encompass,
      point_device_get, inkextent_user_with_margin

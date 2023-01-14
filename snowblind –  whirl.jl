@@ -1,12 +1,14 @@
 using Test
 using Luxor
 # Imports, snap, etc.
-include("LuxorLayout.jl")
+if ! @isdefined LuxorLayout
+    include("LuxorLayout.jl")
+end
 using .LuxorLayout: margins_set, Margins, scale_limiting_get
 using .LuxorLayout: encompass, inkextent_set, inkextent_reset, 
     inkextent_user_with_margin, point_device_get, point_user_get
 using .LuxorLayout: snap, countimage_setvalue, text_on_overlay
-using .LuxorLayout: mark_inkextent, distance_device_origin
+using .LuxorLayout: mark_inkextent, distance_to_device_origin_get
 # We have some old images we won't overwrite. Start after:
 countimage_setvalue(99)
 
@@ -15,6 +17,7 @@ const SKI_DECAL = Ref{Path}(Path([PathClose()]))
 
 # Example specifics
 include("drawingfuncs.jl")
+
 
 #############################################################
 #
@@ -37,6 +40,13 @@ include("drawingfuncs.jl")
 # 100
 #####
 Drawing(NaN, NaN, :rec)
+# Some checks against the current state; unfortunately,
+# there is no 'reset' of LuxorLayout variables
+# that are run whenever starting a new drawing
+@assert LuxorLayout.LIMITING_WIDTH[] == 800
+@assert LuxorLayout.LIMITING_HEIGHT[] == 800
+@assert all(LuxorLayout.inkextent_user_get() .== BoundingBox(O + (-368, -376), O +(368, 376)))
+@assert scale_limiting_get() == 1.0
 background("snow1")
 # In this first image, we're going to zoom in when making an image.
 # If we were using inkextent_reset(), that would set us up for a larger
@@ -46,6 +56,7 @@ p, θₑ = trail_next_length(150, 0, 0, 0)
 translate(p)
 rotate(-θₑ)
 outscale = scale_limiting_get()
+@assert outscale ≈ 1.3381816995488864 "Expected outscale  ≈ 1.3381816995488864, got $outscale"
 cb = inkextent_user_with_margin()
 # The origin of output in user coordinates:
 pto = midpoint(cb)
@@ -226,7 +237,7 @@ Mr. Professor, steeped in knowledge, decides to:
 - call the above a random step and repeat
 
 After the first random step, direct 
-distance from start is $(distance_device_origin() / 100)m.
+distance from start is $(distance_to_device_origin_get() / 100)m.
 """
 # Device origin referred to user space
 odu = point_user_get(O)
@@ -245,7 +256,7 @@ for i = 2:N
     if i == 2 || 100 < i < 102 || i == N
         local txt = """
         After $i 'random steps' and walking $(round(i * 0.053; digits = 1))km, 
-        his straight distance from start is just $(Int(round(distance_device_origin() / 100)))m.
+        his straight distance from start is just $(Int(round(distance_to_device_origin_get() / 100)))m.
         """
         if i > 100
             txt *= """

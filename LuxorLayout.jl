@@ -35,6 +35,7 @@ function *(m::Margins, x)
     t, b, l, r = m.t, m.b, m.l, m.r
     Margins(round(t * x), round(b * x), round(l * x), round(r * x))
 end
+
 "Ref. `margins_set`"
 const MARGINS::Ref{Margins} = Margins()
 "Ref. `set-margins`"
@@ -56,6 +57,9 @@ function margins_set(;t = margins_get().t, b = margins_get().b, l = margins_get(
     margins_set(Margins(t, b, l, r))
 end
 
+# TODO: If LIMITING_... is a keeper,
+# make the function ..._get, _set_, _reset.
+# Be consistent with other mutable containers.
 """
 LIMITING_... serves a different purpose from
 Drawing.width and Drawing.height.
@@ -312,6 +316,7 @@ function overlay_file(f_overlay::Function, filename::String; fkwds...)
         # Issue warning if length(st) > 13705
         st = read(filename, String);
         if length(st) > LIMIT_fsize_read_svg
+            println()
             @warn "Size of svg  $(byte_description(length(st))) > $(byte_description(LIMIT_fsize_read_svg))"
         end
         rimg = readsvg(st)
@@ -551,12 +556,12 @@ snap() = snap( () -> nothing, inkextent_user_with_margin(), scale_limiting_get()
 # 5 Utilities for user and debugging below
 ##########################################
 """
-    distance_device_origin()
+    distance_to_device_origin_get()
 
 What is the distance in user space points due to all of our
 transformations so far? How far has the origin moved?
 """
-distance_device_origin() = Int64(round(hypot(point_device_get(Point(0.0,0.0))...)))
+distance_to_device_origin_get() = Int64(round(hypot(point_device_get(Point(0.0,0.0))...)))
 
 
 """
@@ -618,8 +623,6 @@ function rotation_device_get()
     @assert hypot(y, x) == 1
     atan(y, x)
 end
-
-
 
 end # module
 nothing

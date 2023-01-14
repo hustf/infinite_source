@@ -28,15 +28,19 @@ This file contains a module with the additional functionality that is 'strictly 
 
 
 ## [Snowblind - whirl](snowblind_whirl.md)
-About the limits for canvas size, scale what can be rendered as bitmap vs vector graphics, and a 'sprite' drawn in 'paper space' but matching coordinates from 'model space'.
 
-## [Test_long_svg_paths](test_svg_paths.md)
+About the limits for canvas size, what can be rendered as bitmap vs vector graphics, and a 'sprite' drawn in 'paper space' but matching coordinates from 'model space'.
+
+## [Test_long_svg_paths](test_long_svg_paths.md)
+
 We like Santana too much perhaps.
 
 ## [Test_scale](test_scale.md)
+
 This is mostly about margins in paper space.
 
 ## [Test snap](test_snap.md)
+
 Testing the transformations between paper space and model space.
 
 # To download and test on your own
