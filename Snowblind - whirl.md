@@ -1,4 +1,4 @@
-# [Snowblind - whirl]((https://github.com/hustf/infinite_source/raw/main/snowblind - whirl.jl")
+# [Snowblind - whirl](https://github.com/hustf/infinite_source/raw/main/snowblind%20-%20whirl.jl")
 
 Testing 
 - the limits for canvas size
