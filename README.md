@@ -27,7 +27,8 @@ This file contains a module with the additional functionality that is 'strictly 
     * point_user_get
 
  3. Overlay file
-    Internal
+
+    Internal only
 
  4. Snap
      -> png and svg sequential files
@@ -100,7 +101,7 @@ Testing the transformations between paper space and model space.
 
 ```
 cd cd ~/.julia/environments/
-git clone https://github.com/hustf/Infinite_source
+git clone https://github.com/hustf/infinite_source
 cd ininite source
 ```
 

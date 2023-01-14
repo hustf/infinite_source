@@ -1,4 +1,4 @@
-# [Test_snap]((https://github.com/hustf/infinite_source/raw/main/test_snap.jl)
+# [Test_snap](https://github.com/hustf/infinite_source/raw/main/test_snap.jl)
 
 Testing the transformations between paper space and model space.
 
@@ -7,7 +7,9 @@ intended for adding text. But if we want to add arrows or sprites
 referring to the 'model space', we need a way to convey the transformed 
 coordinates. Keyword arguments is a nice way to do that.
 
-These graphics draw
+The images mark user space coordinates with small circles,
+then it marks the same with larger circles, but
+now from paper space.
 
 ### 20
 
