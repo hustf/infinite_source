@@ -1,6 +1,10 @@
 [deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 Cairo = "159f3aea-2a34-519c-b102-8c37f9878175"
+EzXML = "8f5d6c58-4d21-5cfd-889c-e3ad7ee6a615"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
+InlineStrings = "842dd82b-1e85-43dc-bf29-5d0ee9dffc48"
+LightXML = "9c8b4983-aa76-5018-a973-4c85ecc9e179"
 Luxor = "ae8d54c2-7ccd-5906-9d76-62fc9837b5bc"
 Pango_jll = "36c8627f-9965-5494-a995-c6b170f724f3"
 QuadGK = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"

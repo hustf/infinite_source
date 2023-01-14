@@ -24,7 +24,7 @@ function t_overlay(; pt)
     mark_cs(O; labl = "o5", color = "navy", r = 90, dir=:E)
 end 
 
-@testset "Target a user space point in an overlay." begin
+@testset "Target a user space point in an overlay. Pic. 20-22" begin
     @testset "Rotation, but no ink extension past default. Pic. 20 -21" begin
         Drawing(NaN, NaN, :rec)
         background("coral")

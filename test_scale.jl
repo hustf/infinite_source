@@ -161,7 +161,7 @@ end
     # the margins in output are kept the same after scaling.
     @test round(scale_limiting_get(), digits = 4) == 0.7263
     setopacity(0.3)
-    sethue("indigo")
+    sethue("lightblue")
     # This demonstrates why we must keep track of
     # ink extents in device space rather than in 'user / work' space:
     # We're marking the inkextents in current user space,
@@ -179,8 +179,8 @@ end
           1) Mark default <i>inkextent</i> - solid grey. It's slightly higher 
              than wide because side margins are larger.
           2) Set a clockwise rotation mapping from <i>user</i> to <i>device</i>.
-          3) Draw a solid indigo rectangle - same width and height.
-          4) Encompass the indigo rectangle, too, within <i>ink extent</i>.
+          3) Draw a solid blue rectangle - same width and height.
+          4) Encompass the blue rectangle, too, within <i>ink extent</i>.
           5) Mark <small>inkextent_user_get()</small> - dashed.
           6) Rotate back - <i>user</i> and <i>device</i> are aligned again
           7) Mark <small>inkextent_user_get()</small> - dashed and lighter. 
@@ -287,3 +287,6 @@ end
     @test point_device_get(pu1) == pd1
     @test point_user_get(pd1) == pu1 
 end
+# Don't cause harm, reset
+LIMITING_WIDTH[] = 800
+LIMITING_HEIGHT[] = 800

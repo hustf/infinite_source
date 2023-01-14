@@ -81,6 +81,27 @@ snap(sn_overlay, cb, outscale; pt, scale = outscale, txt)
 # 101
 #####
 
+
+txt = """
+Sombrerial radius is 40. In this story of caution, 
+lengths are in centimeters. The computer knows it not.
+
+Output is 800 points wide or tall. Margins are 24 / 32 points.
+
+We break a trail on a limitless drawing, but update <small>inkextent</small>.
+
+Skis point right for easy reading.
+"""
+cb = BoundingBox(O + (35, -60), O + (150, 2))
+outscale = LuxorLayout.LIMITING_WIDTH[] / boxwidth(cb)
+pt = (O - midpoint(cb)) * outscale
+snap(sn_overlay, cb, outscale; pt, scale = outscale, txt)
+
+
+#####
+# 102
+#####
+
 p, θₑ = trail_next_length(283, 0, 0.00095, 0)
 translate(p)
 rotate(-θₑ)
@@ -94,11 +115,13 @@ txt = """
 
 Pretty soon, the sombrero-skier will turn 
 snowblind. And turn to veering off course.
+
+    <small>inkextent_user_get()</small> is dashed.
 """
 snap(sn_overlay, cb, outscale; pt, scale = outscale, txt)
 
 #####
-# 102
+# 103
 #####
 # Revert to default margins
 margins_set(Margins())
@@ -121,7 +144,7 @@ Then again, the students were sober.
 snap(sn_overlay, cb, outscale; pt, scale = outscale, txt)
 
 #####
-# 103
+# 104
 #####
 
 Drawing(NaN, NaN, :rec)
@@ -144,7 +167,7 @@ mark_inkextent()
 snap(sn_overlay, cb, outscale; pt, scale = outscale, txt)
 
 #####
-# 104
+# 105
 #####
 
 Drawing(NaN, NaN, :rec)
@@ -175,7 +198,7 @@ mark_inkextent()
 snap(sn_overlay, cb, outscale; pt, scale = outscale, txt)
 
 #####
-# 105
+# 106
 #####
 
 Drawing(NaN, NaN, :rec)
@@ -212,27 +235,35 @@ snap(sn_overlay, cb, outscale; pt, scale = outscale, txt, markdistance = true, s
 
 
 ###########
-# 106,-1000
+# 107 - 109
 ###########
 
-N = 890
+N = 889
 println("Random step no: ")
 for i = 2:N
     local cb, outscale, pt = randomstep()
-    if i == 2 || 100 < i < 167 || i == N
+    if i == 2 || 100 < i < 102 || i == N
         local txt = """
         After $i 'random steps' and walking $(round(i * 0.053; digits = 1))km, 
         his straight distance from start is just $(Int(round(distance_device_origin() / 100)))m.
-        You may need to zoom in to see the trail?
-        
-        Mr. Professor realizes what a poor sod he is, 
-        stuck in a nightmare statistics example.
-
-        Why didn't he
-        - explain random steps better?
-        - use sunglasses?
-        - give certain students better marks?
         """
+        if i > 100
+            txt *= """
+            You may need to zoom in to see the trail?
+        
+            """
+        end
+        if i > 200
+            txt *= """
+            Mr. Professor realizes what a poor sod he is, 
+            stuck in a nightmare statistics example.
+
+            Why didn't he
+            - explain random steps better?
+            - use sunglasses?
+            - give certain students better marks?
+           """
+        end
         local startpt = (point_user_get(O)- midpoint(cb)) * outscale
         # This call marks the distance to start in the overlay.
         global sn = snap(sn_overlay, cb, outscale; pt, scale = outscale, txt, markdistance = true, startpt)

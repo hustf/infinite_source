@@ -19,7 +19,7 @@ import Base.*
 #
 # margins_get, margins_set, Margins, 
 # scale_limiting_get,
-# LIMITING_WIDTH[], LIMITING_HEIGHT
+# LIMITING_WIDTH[], LIMITING_HEIGHT[]
 ########################################
 
 "Ref. `margins_set`"
@@ -262,6 +262,7 @@ end
 #    thread with a separate Cairo 
 #    instance.
 ##################################
+const LIMIT_fsize_read_svg = 13705152
 """
     overlay_file(filename, txt)
     overlay_file(f_overlay::Function, filename::String)
@@ -303,11 +304,16 @@ function overlay_file(f_overlay::Function, filename::String; fkwds...)
     assert_second_thread()
     assert_file_exists(filename)
     if endswith(filename, ".svg")
-        # The following line failed for a large file. The smallest file with failure was 9801Kb.
-        # rimg = readsvg(filename) 
-        # Ref. https://github.com/lobingera/Rsvg.jl/issues/26 - the fix seems to be 
-        # implemented for large strings, but not for reading directly from file.
+        # Reading large svg files sometimes fail.
+        # The error messages user receives can be
+        # misleading, because the parser fails in complicated ways.
+        # The largest file successfully tested was         20 272kB, made with Luxor.
+        # The smallest file with failure we encountered is  9 801kB, made with Inkscape.
+        # Issue warning if length(st) > 13705
         st = read(filename, String);
+        if length(st) > LIMIT_fsize_read_svg
+            @warn "Size of svg  $(byte_description(length(st))) > $(byte_description(LIMIT_fsize_read_svg))"
+        end
         rimg = readsvg(st)
     elseif endswith(filename, ".png")
         rimg = readpng(filename)
@@ -374,7 +380,7 @@ function assert_file_exists(filename)
     end
 end
 
-
+byte_description(x) = string(Int64(round(x / 1000))) * "kB "
 #####################################
 #  4 Snap
 #     -> png and svg sequential files
@@ -382,8 +388,10 @@ end
 #     uses a second thread
 #     to add overlays.
 #####################################
-
-
+const LIMIT_fsize_render_to_png = 5626310
+const LIMIT_pixel_render_to_png  = 32767
+const LIMIT_pixel_area = 5.7e9
+const LIMIT_pixel_area_soft = 5.293e9
 """
 A stateful image sequence counter for procedural (aka scripting) work.
 For next value: COUNTIMAGE(). For current value: COUNTIMAGE.value
@@ -456,30 +464,27 @@ function snap(f_overlay::Function, cb::BoundingBox, scalefactor::Float64; fkwds.
     h = round(boxheight(cb))
     ws = round(w * scalefactor)
     hs = round(h * scalefactor)
-    pixlim = 5.7e9
-    pixsoftlim = 5.293e9
-    if w * h > pixlim
+    if w * h > LIMIT_pixel_area
         println()
-        @warn("crop box w·h > $pixlim @$(fpng)
+        @warn("crop box w·h > $LIMIT_pixel_area @$(fpng)
                 .png output is dropped, and the svg image is returned instead.")
         return res
-    elseif w * h > pixsoftlim
+    elseif w * h > LIMIT_pixel_area_soft
         println()
         @warn("Rendering this as $fpng may allocate too much memory. 
-                Crop box width is $w, height $h, w·h = $(w * h) < limit $pixlim.
+                Crop box width is $w, height $h, w·h = $(w * h) < limit $LIMIT_pixel_area.
                 Scaled width is $ws, height $hs, ws·hs = $(ws * hs)
                 We may try anyway, good luck!")
     end
-    if ws > 32767 || hs > 32767
+    if ws > LIMIT_pixel_render_to_png  || hs > LIMIT_pixel_render_to_png
         println()
         @warn("Rendering this as $fpng exceeds limits for crop box.
-              w = $w > 32767 || h = $h > 32767
+              w = $w > $LIMIT_pixel_render_to_png  || h = $h > $LIMIT_pixel_render_to_png
               ws = $ws          hs = $hs 
              We try anyway, good luck!")
     end
-    sizelim = 5626310
-    if filesize(fsvg) > sizelim && w * h > pixsoftlim
-        @warn("filesize = $(round(filesize(fsvg) /1000 ))kB > sizelim = $(round(sizelim /1000 ))kB
+    if filesize(fsvg) > LIMIT_fsize_render_to_png && w * h > LIMIT_pixel_area_soft
+        @warn("filesize = $(byte_description(filesize(fsvg))) > LIMIT_fsize_render_to_png = $(byte_description(LIMIT_fsize_render_to_png))
              .png output is dropped, and the svg image is returned instead.")
         return res
     end
